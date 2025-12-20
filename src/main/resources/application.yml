@@ -64,17 +64,23 @@ strategy:
     slopeLookbackBars: 20
     weakSlope: 0.002
     strongSlope: 0.01
-    minTradesPerBucket: 6
+    minTradesPerBucket: 10
     thresholds:
-      atrLow: 0.002266
-      atrHigh: 0.003541
-      volumeLow: 1.321967
-      volumeHigh: 1.815555
+      atrLow: 0.002092
+      atrHigh: 0.003182
+      volumeLow: 1.185348
+      volumeHigh: 1.605342
     blocked:
-      - UP_WEAK|LOW|HIGH
-      - UP_WEAK|MID|NORMAL
-      - UP_WEAK|HIGH|HIGH
-      - UP_WEAK|HIGH|NORMAL
+      - UP_STRONG|MID|NORMAL
+      - UP_STRONG|HIGH|HIGH
+      - UP_STRONG|HIGH|NORMAL
+      - UP_WEAK|LOW|LOW
+      - UP_WEAK|LOW|NORMAL
+      - UP_STRONG|LOW|NORMAL
+      - UP_STRONG|LOW|LOW
+      - UP_STRONG|MID|LOW
+      - UP_WEAK|MID|HIGH
+      - UP_STRONG|HIGH|LOW
 
 risk:
   riskPerTrade: 0.01
