@@ -74,8 +74,13 @@ strategy:
     blocked: []
     allowed:
       - UP_WEAK|MID|LOW
-      - FLAT|HIGH|NORMAL
+      - UP_WEAK|MID|NORMAL
+      - UP_WEAK|LOW|NORMAL
+      - UP_WEAK|HIGH|NORMAL
       - UP_STRONG|MID|HIGH
+      - UP_STRONG|LOW|HIGH
+      - UP_STRONG|HIGH|HIGH
+      - FLAT|HIGH|NORMAL
 
 risk:
   riskPerTrade: 0.02
