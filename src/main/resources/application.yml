@@ -67,14 +67,15 @@ strategy:
     strongSlope: 0.01
     minTradesPerBucket: 10
     thresholds:
-      atrLow: 0.002289
-      atrHigh: 0.002975
-      volumeLow: 1.146550
-      volumeHigh: 1.590194
-    blocked:
-      - UP_WEAK|LOW|LOW
-      - UP_WEAK|HIGH|LOW
-    allowed: []
+      atrLow: 0.002057
+      atrHigh: 0.003239
+      volumeLow: 1.214275
+      volumeHigh: 1.664459
+    blocked: []
+    allowed:
+      - UP_WEAK|MID|LOW
+      - FLAT|HIGH|NORMAL
+      - UP_STRONG|MID|HIGH
 
 risk:
   riskPerTrade: 0.02
