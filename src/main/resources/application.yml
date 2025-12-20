@@ -48,7 +48,7 @@ strategy:
     enableWaveFilter: true
     enableTrendFilter: true
     enableVolumeFilter: true
-    enableRegimeGate: false
+    enableRegimeGate: true
     entryModel: BASELINE
     exitModel: FIXED
   exit:
@@ -66,11 +66,15 @@ strategy:
     strongSlope: 0.01
     minTradesPerBucket: 6
     thresholds:
-      atrLow: 0.0
-      atrHigh: 0.0
-      volumeLow: 0.0
-      volumeHigh: 0.0
-    blocked: []
+      atrLow: 0.002266
+      atrHigh: 0.003541
+      volumeLow: 1.321967
+      volumeHigh: 1.815555
+    blocked:
+      - UP_WEAK|LOW|HIGH
+      - UP_WEAK|MID|NORMAL
+      - UP_WEAK|HIGH|HIGH
+      - UP_WEAK|HIGH|NORMAL
 
 risk:
   riskPerTrade: 0.01
