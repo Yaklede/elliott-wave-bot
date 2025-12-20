@@ -48,8 +48,8 @@ strategy:
     enableTrendFilter: true
     enableVolumeFilter: true
     enableRegimeGate: false
-    entryModel: CONFIDENCE_THRESHOLD
-    exitModel: HYBRID
+    entryModel: BASELINE
+    exitModel: FIXED
   exit:
     atrStopMultiplier: 1.5
     atrTakeProfitMultiplier: 3.0
