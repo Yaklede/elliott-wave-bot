@@ -54,8 +54,8 @@ strategy:
   exit:
     atrStopMultiplier: 1.5
     atrTakeProfitMultiplier: 3.0
-    trailActivationAtr: 1.0
-    trailDistanceAtr: 1.0
+    trailActivationAtr: 0.0
+    trailDistanceAtr: 0.0
     timeStopBars: 32
     maxStopAtrMultiplier: 0.0
   entry:
