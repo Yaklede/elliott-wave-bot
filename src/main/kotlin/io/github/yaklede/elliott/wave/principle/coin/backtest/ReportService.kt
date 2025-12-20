@@ -19,6 +19,7 @@ class ReportService(
         outputDir: Path,
         weakSlope: BigDecimal,
         strongSlope: BigDecimal,
+        minTradesPerBucket: Int,
     ): ReportPaths {
         Files.createDirectories(outputDir)
         val reportPath = outputDir.resolve("strategy-report.md")
@@ -31,6 +32,9 @@ class ReportService(
         val losingPatterns = topLosingPatterns(trades)
         val rejectCounts = decisions.mapNotNull { it.rejectReason }.groupingBy { it }.eachCount()
         val regime = regimeAnalyzer.analyze(trades, weakSlope, strongSlope)
+        val suggestedBlocks = regime.metrics
+            .filter { it.trades >= minTradesPerBucket && it.expectancy < BigDecimal.ZERO }
+            .map { it.bucket }
 
         val report = buildString {
             appendLine("# Strategy Report")
@@ -76,6 +80,30 @@ class ReportService(
             appendLine("| --- | --- | --- | --- | --- | --- | --- |")
             regime.metrics.forEach { row ->
                 appendLine("| ${row.bucket.trend} | ${row.bucket.vol} | ${row.bucket.volume} | ${row.trades} | ${row.profitFactor} | ${row.expectancy} | ${row.winRate} |")
+            }
+            appendLine()
+            appendLine("## Suggested regime gate (negative expectancy)")
+            if (suggestedBlocks.isEmpty()) {
+                appendLine("- None (no buckets below expectancy threshold with sufficient trades)")
+            } else {
+                appendLine("- minTradesPerBucket: $minTradesPerBucket")
+                appendLine()
+                appendLine("Suggested config:")
+                appendLine("```yaml")
+                appendLine("strategy:")
+                appendLine("  features:")
+                appendLine("    enableRegimeGate: true")
+                appendLine("  regime:")
+                appendLine("    thresholds:")
+                appendLine("      atrLow: ${regime.thresholds.atrLow}")
+                appendLine("      atrHigh: ${regime.thresholds.atrHigh}")
+                appendLine("      volumeLow: ${regime.thresholds.volumeLow}")
+                appendLine("      volumeHigh: ${regime.thresholds.volumeHigh}")
+                appendLine("    blocked:")
+                suggestedBlocks.forEach { bucket ->
+                    appendLine("      - ${bucket.trend}|${bucket.vol}|${bucket.volume}")
+                }
+                appendLine("```")
             }
         }
 

@@ -94,6 +94,7 @@ class BacktestRunner(
             outputDir = Path.of("build/reports"),
             weakSlope = strategyProperties.regime.weakSlope,
             strongSlope = strategyProperties.regime.strongSlope,
+            minTradesPerBucket = strategyProperties.regime.minTradesPerBucket,
         )
         val report = BacktestReport(run.result, run.trades)
         lastReport.set(report)

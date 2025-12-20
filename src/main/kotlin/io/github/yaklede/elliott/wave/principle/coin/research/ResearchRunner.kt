@@ -88,6 +88,7 @@ class ResearchRunner(
                     outputDir = outputDir,
                     weakSlope = strategyProperties.regime.weakSlope,
                     strongSlope = strategyProperties.regime.strongSlope,
+                    minTradesPerBucket = strategyProperties.regime.minTradesPerBucket,
                 )
             }
             ResearchMode.ABLATION -> {
