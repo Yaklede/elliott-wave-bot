@@ -58,7 +58,7 @@ strategy:
     trailDistanceAtr: 0.0
     timeStopBars: 48
     maxStopAtrMultiplier: 0.0
-    breakEvenAtr: 0.8
+    breakEvenAtr: 0.0
   entry:
     minRewardRisk: 1.1
   regime:
