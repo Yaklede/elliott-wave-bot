@@ -20,3 +20,7 @@ gradle-app.setting
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
 .idea
+
+# Local runtime state
+data/portfolio-state.json
+data/risk-state.json

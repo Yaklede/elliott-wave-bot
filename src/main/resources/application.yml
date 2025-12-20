@@ -1,0 +1,58 @@
+spring:
+  application:
+    name: elliott-wave-bot
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+bot:
+  mode: BACKTEST
+
+bybit:
+  baseUrl: https://api-testnet.bybit.com
+  wsPublicUrl: wss://stream-testnet.bybit.com/v5/public/spot
+  wsPrivateUrl: wss://stream-testnet.bybit.com/v5/private
+  apiKey: ${BYBIT_API_KEY:}
+  apiSecret: ${BYBIT_API_SECRET:}
+  recvWindowMs: 5000
+  category: spot
+  symbol: BTCUSDT
+  interval: 15
+  htfInterval: 60
+
+strategy:
+  zigzag:
+    mode: PERCENT
+    percentThreshold: 0.015
+    atrPeriod: 14
+    atrMultiplier: 2.0
+  elliott:
+    enforceWave4NoOverlap: true
+    minScoreToTrade: 0.65
+    fib:
+      wave2PreferredMin: 0.5
+      wave2PreferredMax: 0.618
+      takeProfitExtension: 1.618
+
+risk:
+  riskPerTrade: 0.01
+  dailyMaxDd: 0.03
+  maxConsecutiveLosses: 3
+  cooldownMinutes: 60
+  minQty: 0.0
+  maxQty: 1000000.0
+  statePath: data/risk-state.json
+
+backtest:
+  initialCapital: 1000
+  feeRate: 0.0006
+  slippageBps: 2
+  startMs:
+  endMs:
+  csvPath: data/sample_btcusdt_15m.csv
+
+portfolio:
+  statePath: data/portfolio-state.json

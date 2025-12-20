@@ -1,0 +1,34 @@
+package io.github.yaklede.elliott.wave.principle.coin.config
+
+import java.math.BigDecimal
+import org.springframework.boot.context.properties.ConfigurationProperties
+
+@ConfigurationProperties("strategy")
+data class StrategyProperties(
+    val zigzag: ZigZagProperties = ZigZagProperties(),
+    val elliott: ElliottProperties = ElliottProperties(),
+)
+
+data class ZigZagProperties(
+    val mode: ZigZagMode = ZigZagMode.PERCENT,
+    val percentThreshold: BigDecimal = BigDecimal("0.015"),
+    val atrPeriod: Int = 14,
+    val atrMultiplier: BigDecimal = BigDecimal("2.0"),
+)
+
+enum class ZigZagMode {
+    PERCENT,
+    ATR,
+}
+
+data class ElliottProperties(
+    val enforceWave4NoOverlap: Boolean = true,
+    val minScoreToTrade: BigDecimal = BigDecimal("0.65"),
+    val fib: FibProperties = FibProperties(),
+)
+
+data class FibProperties(
+    val wave2PreferredMin: BigDecimal = BigDecimal("0.5"),
+    val wave2PreferredMax: BigDecimal = BigDecimal("0.618"),
+    val takeProfitExtension: BigDecimal = BigDecimal("1.618"),
+)
