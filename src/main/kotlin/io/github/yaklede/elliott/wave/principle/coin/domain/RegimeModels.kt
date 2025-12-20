@@ -46,6 +46,10 @@ data class RegimeGate(
     val thresholds: RegimeThresholds,
     val blockedBuckets: Set<RegimeBucketKey>,
     val minTradesPerBucket: Int,
+    val allowedBuckets: Set<RegimeBucketKey> = emptySet(),
 ) {
-    fun isBlocked(bucket: RegimeBucketKey): Boolean = blockedBuckets.contains(bucket)
+    fun isBlocked(bucket: RegimeBucketKey): Boolean {
+        if (allowedBuckets.isNotEmpty() && bucket !in allowedBuckets) return true
+        return blockedBuckets.contains(bucket)
+    }
 }

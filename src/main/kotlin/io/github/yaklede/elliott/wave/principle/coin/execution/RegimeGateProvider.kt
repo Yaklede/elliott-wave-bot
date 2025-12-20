@@ -18,11 +18,13 @@ class RegimeGateProvider(
         if (!strategyProperties.features.enableRegimeGate) return null
         val thresholds = thresholdsOrNull() ?: return null
         val blocked = strategyProperties.regime.blocked.mapNotNull { parseBucket(it) }.toSet()
-        if (blocked.isEmpty()) return null
+        val allowed = strategyProperties.regime.allowed.mapNotNull { parseBucket(it) }.toSet()
+        if (blocked.isEmpty() && allowed.isEmpty()) return null
         return RegimeGate(
             thresholds = thresholds,
             blockedBuckets = blocked,
             minTradesPerBucket = strategyProperties.regime.minTradesPerBucket,
+            allowedBuckets = allowed,
         )
     }
 

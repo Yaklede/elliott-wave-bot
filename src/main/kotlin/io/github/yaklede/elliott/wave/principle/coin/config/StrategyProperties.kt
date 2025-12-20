@@ -98,6 +98,7 @@ data class RegimeProperties(
     val minTradesPerBucket: Int = 12,
     val thresholds: RegimeThresholdProperties = RegimeThresholdProperties(),
     val blocked: List<String> = emptyList(),
+    val allowed: List<String> = emptyList(),
 )
 
 data class RegimeThresholdProperties(
