@@ -50,7 +50,7 @@ strategy:
     enableVolumeFilter: true
     enableRegimeGate: true
     entryModel: BASELINE
-    exitModel: TIME_STOP
+    exitModel: FIXED
   exit:
     atrStopMultiplier: 1.5
     atrTakeProfitMultiplier: 3.0
