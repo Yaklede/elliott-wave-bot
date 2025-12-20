@@ -43,7 +43,7 @@ strategy:
     maxAtrPercent: 0.05
   volume:
     period: 20
-    minMultiplier: 1.0
+    minMultiplier: 1.2
   features:
     enableWaveFilter: true
     enableTrendFilter: true
