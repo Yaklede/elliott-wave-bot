@@ -12,6 +12,7 @@ data class StrategyProperties(
     val features: StrategyFeatures = StrategyFeatures(),
     val exit: ExitProperties = ExitProperties(),
     val regime: RegimeProperties = RegimeProperties(),
+    val entry: EntryProperties = EntryProperties(),
 )
 
 data class ZigZagProperties(
@@ -44,6 +45,7 @@ data class FibProperties(
 
 data class VolatilityProperties(
     val atrPeriod: Int = 14,
+    val minAtrPercent: BigDecimal = BigDecimal("0.001"),
     val maxAtrPercent: BigDecimal = BigDecimal("0.05"),
 )
 
@@ -82,6 +84,10 @@ data class ExitProperties(
     val trailDistanceAtr: BigDecimal = BigDecimal("1.0"),
     val timeStopBars: Int = 32,
     val maxStopAtrMultiplier: BigDecimal = BigDecimal("4.0"),
+)
+
+data class EntryProperties(
+    val minRewardRisk: BigDecimal = BigDecimal("1.2"),
 )
 
 data class RegimeProperties(

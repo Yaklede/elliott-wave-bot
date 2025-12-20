@@ -39,6 +39,7 @@ strategy:
       takeProfitExtension: 1.618
   volatility:
     atrPeriod: 14
+    minAtrPercent: 0.001
     maxAtrPercent: 0.05
   volume:
     period: 20
@@ -57,6 +58,8 @@ strategy:
     trailDistanceAtr: 1.0
     timeStopBars: 32
     maxStopAtrMultiplier: 4.0
+  entry:
+    minRewardRisk: 1.2
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002

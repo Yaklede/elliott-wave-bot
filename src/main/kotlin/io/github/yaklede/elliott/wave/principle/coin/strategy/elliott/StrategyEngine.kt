@@ -109,6 +109,9 @@ class StrategyEngine(
             if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
                 return hold(RejectReason.STOP_DISTANCE, features, score, confidence)
             }
+            if (isRewardRiskTooLow(lastClose, exitPlan)) {
+                return hold(RejectReason.LOW_REWARD_RISK, features, score, confidence)
+            }
             return TradeSignal(
                 type = SignalType.ENTER_LONG,
                 entryPrice = lastClose,
@@ -152,6 +155,9 @@ class StrategyEngine(
             if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
                 return hold(RejectReason.STOP_DISTANCE, features)
             }
+            if (isRewardRiskTooLow(lastClose, exitPlan)) {
+                return hold(RejectReason.LOW_REWARD_RISK, features)
+            }
             return TradeSignal(
                 type = SignalType.ENTER_LONG,
                 entryPrice = lastClose,
@@ -193,6 +199,8 @@ class StrategyEngine(
         val close = candles.last().close
         if (close <= BigDecimal.ZERO) return true
         val atrPercent = atr.divide(close, 6, RoundingMode.HALF_UP)
+        val min = properties.volatility.minAtrPercent
+        if (min > BigDecimal.ZERO && atrPercent < min) return false
         return atrPercent <= properties.volatility.maxAtrPercent
     }
 
@@ -222,5 +230,16 @@ class StrategyEngine(
         val maxDistance = atrValue.multiply(properties.exit.maxStopAtrMultiplier)
         val distance = entryPrice.subtract(stopPrice).abs()
         return distance > maxDistance
+    }
+
+    private fun isRewardRiskTooLow(entryPrice: BigDecimal, plan: ExitPlan?): Boolean {
+        if (plan == null) return false
+        val stop = plan.stopPrice ?: return false
+        val takeProfit = plan.takeProfitPrice ?: return false
+        val risk = entryPrice.subtract(stop).abs()
+        val reward = takeProfit.subtract(entryPrice).abs()
+        if (risk <= BigDecimal.ZERO) return true
+        val rr = reward.divide(risk, 6, RoundingMode.HALF_UP)
+        return rr < properties.entry.minRewardRisk
     }
 }

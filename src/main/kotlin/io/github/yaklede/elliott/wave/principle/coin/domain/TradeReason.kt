@@ -18,6 +18,7 @@ enum class RejectReason {
     VOLATILITY_FILTER,
     VOLUME_FILTER,
     STOP_DISTANCE,
+    LOW_REWARD_RISK,
     LOW_SCORE,
     NO_SETUP,
     REGIME_GATED,
