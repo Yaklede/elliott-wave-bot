@@ -47,6 +47,7 @@ class ExecutionEngine(
     private val liveModeGuard: LiveModeGuard,
     private val botStateStore: BotStateStore,
     private val riskStateStore: RiskStateStore,
+    private val regimeGateProvider: RegimeGateProvider,
     private val backtestRunner: io.github.yaklede.elliott.wave.principle.coin.backtest.BacktestRunner,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -117,7 +118,8 @@ class ExecutionEngine(
         riskManager.updateEquity(portfolioService.equity.add(portfolioService.unrealizedPnl()), now)
         riskStateStore.save(riskManager.snapshot())
 
-        val signal = strategyEngine.evaluate(candles, htfCandles)
+        val gate = regimeGateProvider.currentGate()
+        val signal = strategyEngine.evaluate(candles, htfCandles, gate)
         val position = portfolioService.position
 
         if (position.side == PositionSide.FLAT && signal.type == SignalType.ENTER_LONG) {

@@ -13,6 +13,7 @@ import io.github.yaklede.elliott.wave.principle.coin.config.RiskProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
+import io.github.yaklede.elliott.wave.principle.coin.execution.RegimeGateProvider
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.CandleResampler
 import io.github.yaklede.elliott.wave.principle.coin.portfolio.PortfolioService
@@ -40,6 +41,7 @@ class ResearchRunner(
     private val sanityChecks: BacktestSanityChecks,
     private val reportService: ReportService,
     private val regimeAnalyzer: RegimeAnalyzer,
+    private val regimeGateProvider: RegimeGateProvider,
     private val context: ConfigurableApplicationContext,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -70,11 +72,13 @@ class ResearchRunner(
                 val engine = StrategyEngine(strategyProperties)
                 val riskManager = RiskManager(riskProperties)
                 val portfolio = PortfolioService(backtestProperties)
+                val gate = regimeGateProvider.currentGate()
                 val run = simulator.run(
                     candles = candles,
                     strategyEngine = engine,
                     riskManager = riskManager,
                     portfolioService = portfolio,
+                    regimeGate = gate,
                     recordDecisions = true,
                 )
                 reportService.writeStrategyReport(

@@ -5,6 +5,7 @@ import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.execution.BotStateStore
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
+import io.github.yaklede.elliott.wave.principle.coin.execution.RegimeGateProvider
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.CandleResampler
@@ -32,6 +33,7 @@ class BacktestRunner(
     private val botStateStore: BotStateStore,
     private val sanityChecks: BacktestSanityChecks,
     private val reportService: ReportService,
+    private val regimeGateProvider: RegimeGateProvider,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val csvLoader = CsvCandleLoader()
@@ -62,23 +64,27 @@ class BacktestRunner(
     }
 
     fun run(candles: List<Candle>): BacktestResult {
+        val gate = regimeGateProvider.currentGate()
         return simulator.run(
             candles = candles,
             strategyEngine = strategyEngine,
             riskManager = riskManager,
             portfolioService = portfolioService,
             botStateStore = botStateStore,
+            regimeGate = gate,
             recordDecisions = false,
         ).result
     }
 
     fun runReport(candles: List<Candle>): BacktestReport {
+        val gate = regimeGateProvider.currentGate()
         val run = simulator.run(
             candles = candles,
             strategyEngine = strategyEngine,
             riskManager = riskManager,
             portfolioService = portfolioService,
             botStateStore = botStateStore,
+            regimeGate = gate,
             recordDecisions = true,
         )
         reportService.writeStrategyReport(

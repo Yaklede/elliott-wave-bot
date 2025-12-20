@@ -6,6 +6,7 @@ import io.github.yaklede.elliott.wave.principle.coin.config.RiskProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.execution.BotStateStore
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
+import io.github.yaklede.elliott.wave.principle.coin.execution.RegimeGateProvider
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.InstrumentInfoService
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
@@ -51,6 +52,7 @@ class BacktestRunnerTest {
         val orderPriceService = OrderPriceService(instrumentInfoService, bybitProperties)
         val sanityChecks = BacktestSanityChecks()
         val reportService = ReportService(RegimeAnalyzer())
+        val regimeGateProvider = RegimeGateProvider(strategyProperties)
 
         val runner = BacktestRunner(
             properties = backtestProperties,
@@ -65,6 +67,7 @@ class BacktestRunnerTest {
             botStateStore = botStateStore,
             sanityChecks = sanityChecks,
             reportService = reportService,
+            regimeGateProvider = regimeGateProvider,
         )
 
         val candles = sampleCandles()

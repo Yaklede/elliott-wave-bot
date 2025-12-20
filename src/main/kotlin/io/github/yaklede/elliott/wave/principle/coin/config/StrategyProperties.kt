@@ -88,4 +88,13 @@ data class RegimeProperties(
     val weakSlope: BigDecimal = BigDecimal("0.002"),
     val strongSlope: BigDecimal = BigDecimal("0.01"),
     val minTradesPerBucket: Int = 12,
+    val thresholds: RegimeThresholdProperties = RegimeThresholdProperties(),
+    val blocked: List<String> = emptyList(),
+)
+
+data class RegimeThresholdProperties(
+    val atrLow: BigDecimal = BigDecimal.ZERO,
+    val atrHigh: BigDecimal = BigDecimal.ZERO,
+    val volumeLow: BigDecimal = BigDecimal.ZERO,
+    val volumeHigh: BigDecimal = BigDecimal.ZERO,
 )

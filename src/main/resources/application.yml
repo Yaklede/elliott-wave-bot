@@ -61,6 +61,12 @@ strategy:
     weakSlope: 0.002
     strongSlope: 0.01
     minTradesPerBucket: 12
+    thresholds:
+      atrLow: 0.0
+      atrHigh: 0.0
+      volumeLow: 0.0
+      volumeHigh: 0.0
+    blocked: []
 
 risk:
   riskPerTrade: 0.01

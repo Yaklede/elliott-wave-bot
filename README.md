@@ -105,6 +105,23 @@ Outputs are written to `build/reports/`:
 - `ablation-report.md`
 - `walk-forward-report.md`
 
+## Regime Gate (optional)
+Use the report’s regime table to block consistently negative buckets. Configure:
+```yaml
+strategy:
+  features:
+    enableRegimeGate: true
+  regime:
+    thresholds:
+      atrLow: 0.002
+      atrHigh: 0.004
+      volumeLow: 1.2
+      volumeHigh: 1.8
+    blocked:
+      - UP_STRONG|HIGH|HIGH
+      - UP_WEAK|HIGH|LOW
+```
+
 ## Production Setup
 1) Prepare configuration (env + args):
    - `BYBIT_API_KEY`, `BYBIT_API_SECRET` for LIVE only
