@@ -78,8 +78,8 @@ strategy:
       - UP_STRONG|MID|HIGH
 
 risk:
-  riskPerTrade: 0.015
-  dailyMaxDd: 0.05
+  riskPerTrade: 0.02
+  dailyMaxDd: 0.06
   maxConsecutiveLosses: 3
   cooldownMinutes: 60
   minQty: 0.0
@@ -87,9 +87,9 @@ risk:
   statePath: data/risk-state.json
   compounding:
     enabled: true
-    minRiskPerTrade: 0.0075
-    maxRiskPerTrade: 0.04
-    scaleUp: 1.07
+    minRiskPerTrade: 0.01
+    maxRiskPerTrade: 0.05
+    scaleUp: 1.08
     scaleDown: 0.90
     minMultiplier: 0.5
     maxMultiplier: 2.0
