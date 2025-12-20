@@ -15,10 +15,12 @@ import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.StrategyEn
 import io.mockk.mockk
 import java.io.File
 import java.math.BigDecimal
+import java.nio.file.Files
+import java.nio.file.Path
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Assumptions.assumeTrue
-import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.Tag
+import org.junit.jupiter.api.Test
 
 @Tag("backtest")
 class OneYearBacktestTest {
@@ -64,13 +66,24 @@ class OneYearBacktestTest {
         val candles = CsvCandleLoader().load(csvPath)
         val report = runner.runReport(candles)
 
-        println(
-            "One-year backtest result: trades=${report.result.trades}, winRate=${report.result.winRate}, " +
-                "profitFactor=${report.result.profitFactor}, maxDrawdown=${report.result.maxDrawdown}, " +
-                "finalEquity=${report.result.finalEquity}"
-        )
+        val summary = buildString {
+            append("One-year backtest result: ")
+            append("trades=").append(report.result.trades).append(", ")
+            append("winRate=").append(report.result.winRate).append(", ")
+            append("profitFactor=").append(report.result.profitFactor).append(", ")
+            append("maxDrawdown=").append(report.result.maxDrawdown).append(", ")
+            append("finalEquity=").append(report.result.finalEquity)
+        }
+        println(summary)
+        writeSummary(summary)
 
         assertTrue(report.result.trades > 0)
         assertTrue(report.result.finalEquity > BigDecimal.ZERO)
+    }
+
+    private fun writeSummary(summary: String) {
+        val dir = Path.of("build", "reports", "backtest")
+        Files.createDirectories(dir)
+        Files.writeString(dir.resolve("one-year-result.txt"), summary)
     }
 }
