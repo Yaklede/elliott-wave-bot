@@ -57,9 +57,9 @@ strategy:
     trailActivationAtr: 1.0
     trailDistanceAtr: 1.0
     timeStopBars: 32
-    maxStopAtrMultiplier: 6.0
+    maxStopAtrMultiplier: 0.0
   entry:
-    minRewardRisk: 1.0
+    minRewardRisk: 1.1
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002
