@@ -36,26 +36,26 @@ strategy:
     fib:
       wave2PreferredMin: 0.5
       wave2PreferredMax: 0.618
-      takeProfitExtension: 2.0
+      takeProfitExtension: 2.2
   volatility:
     atrPeriod: 14
     minAtrPercent: 0.0
     maxAtrPercent: 0.05
   volume:
     period: 20
-    minMultiplier: 1.2
+    minMultiplier: 1.0
   features:
     enableWaveFilter: true
     enableTrendFilter: true
     enableVolumeFilter: true
-    enableRegimeGate: true
+    enableRegimeGate: false
     entryModel: BASELINE
-    exitModel: HYBRID
+    exitModel: TIME_STOP
   exit:
-    atrStopMultiplier: 1.2
-    atrTakeProfitMultiplier: 3.5
-    trailActivationAtr: 1.5
-    trailDistanceAtr: 1.0
+    atrStopMultiplier: 1.5
+    atrTakeProfitMultiplier: 3.0
+    trailActivationAtr: 0.0
+    trailDistanceAtr: 0.0
     timeStopBars: 48
     maxStopAtrMultiplier: 0.0
     breakEvenAtr: 0.8
@@ -84,8 +84,8 @@ strategy:
       - UP_STRONG|HIGH|LOW
 
 risk:
-  riskPerTrade: 0.02
-  dailyMaxDd: 0.05
+  riskPerTrade: 0.01
+  dailyMaxDd: 0.04
   maxConsecutiveLosses: 3
   cooldownMinutes: 60
   minQty: 0.0
@@ -93,12 +93,12 @@ risk:
   statePath: data/risk-state.json
   compounding:
     enabled: true
-    minRiskPerTrade: 0.01
-    maxRiskPerTrade: 0.05
-    scaleUp: 1.15
-    scaleDown: 0.85
+    minRiskPerTrade: 0.005
+    maxRiskPerTrade: 0.03
+    scaleUp: 1.05
+    scaleDown: 0.90
     minMultiplier: 0.5
-    maxMultiplier: 3.0
+    maxMultiplier: 2.0
 
 backtest:
   initialCapital: 1000
