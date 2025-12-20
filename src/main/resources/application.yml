@@ -36,7 +36,7 @@ strategy:
     fib:
       wave2PreferredMin: 0.5
       wave2PreferredMax: 0.618
-      takeProfitExtension: 3.0
+      takeProfitExtension: 2.2
   volatility:
     atrPeriod: 14
     minAtrPercent: 0.0
@@ -60,7 +60,7 @@ strategy:
     maxStopAtrMultiplier: 0.0
     breakEvenAtr: 0.8
   entry:
-    minRewardRisk: 1.2
+    minRewardRisk: 1.1
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002
