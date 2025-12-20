@@ -19,6 +19,7 @@ data class Position(
     val trailActivationPrice: BigDecimal? = null,
     val trailDistance: BigDecimal? = null,
     val timeStopBars: Int? = null,
+    val breakEvenPrice: BigDecimal? = null,
     val entryTimeMs: Long? = null,
     val entryReason: EntryReason? = null,
     val entryScore: BigDecimal? = null,

@@ -84,6 +84,7 @@ data class ExitProperties(
     val trailDistanceAtr: BigDecimal = BigDecimal("1.0"),
     val timeStopBars: Int = 32,
     val maxStopAtrMultiplier: BigDecimal = BigDecimal("4.0"),
+    val breakEvenAtr: BigDecimal = BigDecimal("1.0"),
 )
 
 data class EntryProperties(

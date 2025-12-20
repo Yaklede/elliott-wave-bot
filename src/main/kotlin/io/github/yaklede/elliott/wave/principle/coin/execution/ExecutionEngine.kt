@@ -150,6 +150,7 @@ class ExecutionEngine(
                         trailActivationPrice = plan.trailActivationPrice,
                         trailDistance = plan.trailDistance,
                         timeStopBars = plan.timeStopBars,
+                        breakEvenPrice = plan.breakEvenPrice,
                         feeRate = backtestProperties.feeRate,
                         timeMs = candleTimeMs,
                         entryReason = signal.entryReason,
@@ -180,6 +181,13 @@ class ExecutionEngine(
                 portfolioStore.save(portfolioService.snapshot())
                 riskStateStore.save(riskManager.snapshot())
             } else {
+                val breakEven = openPosition.breakEvenPrice
+                if (breakEven != null && closePrice >= breakEven) {
+                    val currentStop = openPosition.stopPrice
+                    if (currentStop != null && currentStop < openPosition.avgPrice) {
+                        portfolioService.updateStopLoss(openPosition.avgPrice, openPosition.trailingActive)
+                    }
+                }
                 val updated = updateTrailingStop(openPosition, closePrice)
                 if (updated != null) portfolioService.updateStopLoss(updated.first, updated.second)
                 if (openPosition.timeStopBars != null && openPosition.entryTimeMs != null) {

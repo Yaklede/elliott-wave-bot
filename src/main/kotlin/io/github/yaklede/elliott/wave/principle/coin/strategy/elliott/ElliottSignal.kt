@@ -17,6 +17,7 @@ data class ExitPlan(
     val trailActivationPrice: BigDecimal?,
     val trailDistance: BigDecimal?,
     val timeStopBars: Int?,
+    val breakEvenPrice: BigDecimal?,
 )
 
 data class TradeSignal(

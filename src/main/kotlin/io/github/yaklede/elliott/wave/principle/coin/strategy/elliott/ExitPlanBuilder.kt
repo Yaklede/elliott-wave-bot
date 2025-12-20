@@ -18,6 +18,7 @@ class ExitPlanBuilder(
         val atrTakeProfit = atrValue?.multiply(properties.exit.atrTakeProfitMultiplier)
         val atrTrailActivation = atrValue?.multiply(properties.exit.trailActivationAtr)
         val atrTrailDistance = atrValue?.multiply(properties.exit.trailDistanceAtr)
+        val atrBreakEven = atrValue?.multiply(properties.exit.breakEvenAtr)
 
         val stop = when (exitModel) {
             ExitModel.FIXED, ExitModel.TIME_STOP -> stopCandidate
@@ -39,6 +40,11 @@ class ExitPlanBuilder(
 
         val trailActivationPrice = if (atrTrailActivation != null) entryPrice.add(atrTrailActivation) else null
         val trailDistance = atrTrailDistance
+        val breakEvenPrice = if (atrBreakEven != null && properties.exit.breakEvenAtr > BigDecimal.ZERO) {
+            entryPrice.add(atrBreakEven)
+        } else {
+            null
+        }
         val timeStopBars = when (exitModel) {
             ExitModel.TIME_STOP, ExitModel.HYBRID -> properties.exit.timeStopBars
             else -> null
@@ -50,6 +56,7 @@ class ExitPlanBuilder(
             trailActivationPrice = trailActivationPrice,
             trailDistance = trailDistance,
             timeStopBars = timeStopBars,
+            breakEvenPrice = breakEvenPrice,
         )
     }
 }

@@ -94,6 +94,7 @@ class BacktestSimulator(
                                 trailActivationPrice = plan.trailActivationPrice,
                                 trailDistance = plan.trailDistance,
                                 timeStopBars = plan.timeStopBars,
+                                breakEvenPrice = plan.breakEvenPrice,
                                 feeRate = properties.feeRate,
                                 timeMs = candle.timeOpenMs,
                                 entryReason = pendingSignal!!.entryReason,
@@ -125,6 +126,13 @@ class BacktestSimulator(
                     val pnl = portfolioService.exitLong(fill, properties.feeRate, candle.timeOpenMs, exitReason)
                     riskManager.recordTradeResult(pnl, now)
                 } else {
+                    val breakEven = position.breakEvenPrice
+                    if (breakEven != null && candle.high >= breakEven) {
+                        val currentStop = position.stopPrice
+                        if (currentStop != null && currentStop < position.avgPrice) {
+                            portfolioService.updateStopLoss(position.avgPrice, position.trailingActive)
+                        }
+                    }
                     val updated = updateTrailingStop(position, candle.close)
                     if (updated != null) {
                         portfolioService.updateStopLoss(updated.first, updated.second)
