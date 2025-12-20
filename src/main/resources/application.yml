@@ -31,12 +31,12 @@ strategy:
     atrMultiplier: 2.0
   elliott:
     enforceWave4NoOverlap: true
-    minScoreToTrade: 0.65
+    minScoreToTrade: 0.60
     swingAtrMultiplier: 2.0
     fib:
       wave2PreferredMin: 0.5
       wave2PreferredMax: 0.618
-      takeProfitExtension: 2.6
+      takeProfitExtension: 2.2
   volatility:
     atrPeriod: 14
     minAtrPercent: 0.0
@@ -49,7 +49,7 @@ strategy:
     enableTrendFilter: true
     enableVolumeFilter: true
     enableRegimeGate: true
-    entryModel: MOMENTUM_CONFIRM
+    entryModel: BASELINE
     exitModel: FIXED
   exit:
     atrStopMultiplier: 1.5
