@@ -1,3 +1,16 @@
 spring:
   application:
     name: elliott.wave.principle.coin
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        show_sql: true
+        format_sql: true
+  datasource:
+    driver-class-name: org.mariadb.jdbc.Driver
+    username: root
+    password: password
+    url: jdbc:mariadb://localhost:3306/elliott
