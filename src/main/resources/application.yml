@@ -50,15 +50,15 @@ strategy:
     enableVolumeFilter: true
     enableRegimeGate: true
     entryModel: BASELINE
-    exitModel: FIXED
+    exitModel: HYBRID
   exit:
-    atrStopMultiplier: 1.5
-    atrTakeProfitMultiplier: 3.0
-    trailActivationAtr: 0.0
-    trailDistanceAtr: 0.0
-    timeStopBars: 32
+    atrStopMultiplier: 1.2
+    atrTakeProfitMultiplier: 3.5
+    trailActivationAtr: 1.5
+    trailDistanceAtr: 1.0
+    timeStopBars: 48
     maxStopAtrMultiplier: 0.0
-    breakEvenAtr: 1.0
+    breakEvenAtr: 0.8
   entry:
     minRewardRisk: 1.1
   regime:
