@@ -52,6 +52,7 @@ BOT_ENABLE_LIVE=YES ./gradlew bootRun --args="--bot.mode=LIVE"
 
 ## Backtest as Test Code (1 year)
 - Place a 1-year CSV at `data/bybit_btcusdt_15m_1y.csv` or set `BACKTEST_DATA_PATH`.
+- The CSV should be generated locally (e.g., via Bybit REST) and kept out of git.
 - Run:
 ```bash
 BACKTEST_DATA_PATH=/path/to/1y.csv ./gradlew test --tests '*OneYearBacktestTest*'
@@ -106,3 +107,15 @@ docker run --rm -p 8080:8080 \\
   -v $(pwd)/data:/app/data \\
   elliott-wave-bot:latest --bot.mode=LIVE
 ```
+
+## Docker Swarm
+1) Build and push your image to a registry:
+```bash
+docker build -t your-registry/elliott-wave-bot:latest .
+docker push your-registry/elliott-wave-bot:latest
+```
+2) Deploy stack:
+```bash
+docker stack deploy -c docker-stack.yml elliott
+```
+3) For LIVE mode, update `docker-stack.yml` to set `--bot.mode=LIVE` and provide env vars.
