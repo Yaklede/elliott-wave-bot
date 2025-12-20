@@ -106,6 +106,9 @@ class StrategyEngine(
                 takeProfitCandidate = fixedTakeProfit,
                 atrValue = atrValue,
             )
+            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+                return hold(RejectReason.STOP_DISTANCE, features, score, confidence)
+            }
             return TradeSignal(
                 type = SignalType.ENTER_LONG,
                 entryPrice = lastClose,
@@ -146,6 +149,9 @@ class StrategyEngine(
                 takeProfitCandidate = takeProfit,
                 atrValue = atrValue,
             )
+            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+                return hold(RejectReason.STOP_DISTANCE, features)
+            }
             return TradeSignal(
                 type = SignalType.ENTER_LONG,
                 entryPrice = lastClose,
@@ -204,5 +210,17 @@ class StrategyEngine(
     private fun sma(candles: List<Candle>): BigDecimal {
         val sum = candles.fold(BigDecimal.ZERO) { acc, candle -> acc.add(candle.close) }
         return sum.divide(BigDecimal(candles.size), 8, RoundingMode.HALF_UP)
+    }
+
+    private fun isStopTooWide(
+        entryPrice: BigDecimal,
+        stopPrice: BigDecimal?,
+        atrValue: BigDecimal?,
+    ): Boolean {
+        if (stopPrice == null || atrValue == null) return false
+        if (properties.exit.maxStopAtrMultiplier <= BigDecimal.ZERO) return false
+        val maxDistance = atrValue.multiply(properties.exit.maxStopAtrMultiplier)
+        val distance = entryPrice.subtract(stopPrice).abs()
+        return distance > maxDistance
     }
 }

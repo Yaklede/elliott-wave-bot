@@ -81,6 +81,7 @@ data class ExitProperties(
     val trailActivationAtr: BigDecimal = BigDecimal("1.0"),
     val trailDistanceAtr: BigDecimal = BigDecimal("1.0"),
     val timeStopBars: Int = 32,
+    val maxStopAtrMultiplier: BigDecimal = BigDecimal("4.0"),
 )
 
 data class RegimeProperties(
