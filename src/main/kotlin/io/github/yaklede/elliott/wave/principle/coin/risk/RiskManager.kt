@@ -43,7 +43,7 @@ class RiskManager(
         val stopDistance = entryPrice.subtract(stopPrice).abs()
         if (stopDistance <= BigDecimal.ZERO) return BigDecimal.ZERO
 
-        val riskAmount = equity.multiply(properties.riskPerTrade)
+        val riskAmount = equity.multiply(currentRiskPerTrade())
         val rawQty = riskAmount.divide(stopDistance, 8, RoundingMode.DOWN)
         return rawQty
             .coerceAtLeast(properties.minQty)
@@ -71,7 +71,12 @@ class RiskManager(
         } else {
             state.cooldownUntil
         }
-        state = state.copy(consecutiveLosses = losses, cooldownUntil = cooldownUntil)
+        val updatedMultiplier = updateRiskMultiplier(pnl)
+        state = state.copy(
+            consecutiveLosses = losses,
+            cooldownUntil = cooldownUntil,
+            riskMultiplier = updatedMultiplier,
+        )
     }
 
     fun resetForBacktest(startEquity: BigDecimal, now: Instant = clock.instant()) {
@@ -91,8 +96,29 @@ class RiskManager(
         val day = now.atZone(ZoneOffset.UTC).toLocalDate()
         val currentDay = state.currentDay
         if (currentDay == null || day.isAfter(currentDay)) {
-            state = RiskState(currentDay = day)
+            state = RiskState(currentDay = day, riskMultiplier = state.riskMultiplier)
         }
+    }
+
+    private fun currentRiskPerTrade(): BigDecimal {
+        if (!properties.compounding.enabled) return properties.riskPerTrade
+        val base = properties.riskPerTrade
+        val adjusted = base.multiply(state.riskMultiplier)
+        return adjusted
+            .coerceAtLeast(properties.compounding.minRiskPerTrade)
+            .coerceAtMost(properties.compounding.maxRiskPerTrade)
+    }
+
+    private fun updateRiskMultiplier(pnl: BigDecimal): BigDecimal {
+        if (!properties.compounding.enabled) return state.riskMultiplier
+        val next = if (pnl >= BigDecimal.ZERO) {
+            state.riskMultiplier.multiply(properties.compounding.scaleUp)
+        } else {
+            state.riskMultiplier.multiply(properties.compounding.scaleDown)
+        }
+        return next
+            .coerceAtLeast(properties.compounding.minMultiplier)
+            .coerceAtMost(properties.compounding.maxMultiplier)
     }
 }
 

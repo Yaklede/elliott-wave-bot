@@ -10,4 +10,5 @@ data class RiskState(
     val killSwitchActive: Boolean = false,
     val consecutiveLosses: Int = 0,
     val cooldownUntil: Instant? = null,
+    val riskMultiplier: BigDecimal = BigDecimal.ONE,
 )

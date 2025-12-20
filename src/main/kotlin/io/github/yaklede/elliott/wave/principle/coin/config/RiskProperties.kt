@@ -12,4 +12,15 @@ data class RiskProperties(
     val minQty: BigDecimal = BigDecimal("0.0"),
     val maxQty: BigDecimal = BigDecimal("1000000.0"),
     val statePath: String? = "data/risk-state.json",
+    val compounding: CompoundingProperties = CompoundingProperties(),
+)
+
+data class CompoundingProperties(
+    val enabled: Boolean = false,
+    val minRiskPerTrade: BigDecimal = BigDecimal("0.005"),
+    val maxRiskPerTrade: BigDecimal = BigDecimal("0.03"),
+    val scaleUp: BigDecimal = BigDecimal("1.10"),
+    val scaleDown: BigDecimal = BigDecimal("0.80"),
+    val minMultiplier: BigDecimal = BigDecimal("0.5"),
+    val maxMultiplier: BigDecimal = BigDecimal("2.5"),
 )
