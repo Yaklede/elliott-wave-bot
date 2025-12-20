@@ -45,7 +45,7 @@ strategy:
     period: 20
     minMultiplier: 1.0
   features:
-    enableWaveFilter: false
+    enableWaveFilter: true
     enableTrendFilter: true
     enableVolumeFilter: true
     enableRegimeGate: true
