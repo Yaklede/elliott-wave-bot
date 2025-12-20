@@ -25,3 +25,4 @@ gradle-app.setting
 data/portfolio-state.json
 data/risk-state.json
 data/bybit_*_1y.csv
+out
