@@ -2,21 +2,18 @@ package io.github.yaklede.elliott.wave.principle.coin.backtest
 
 import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.execution.BotStateStore
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.CandleResampler
-import io.github.yaklede.elliott.wave.principle.coin.marketdata.IntervalUtil
 import io.github.yaklede.elliott.wave.principle.coin.portfolio.PortfolioService
-import io.github.yaklede.elliott.wave.principle.coin.portfolio.PositionSide
 import io.github.yaklede.elliott.wave.principle.coin.risk.RiskManager
-import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.SignalType
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.StrategyEngine
 import java.io.File
 import java.math.BigDecimal
-import java.math.RoundingMode
-import java.time.Instant
+import java.nio.file.Path
 import java.util.concurrent.atomic.AtomicReference
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -29,13 +26,23 @@ class BacktestRunner(
     private val candleResampler: CandleResampler,
     private val orderPriceService: OrderPriceService,
     private val strategyEngine: StrategyEngine,
+    private val strategyProperties: StrategyProperties,
     private val riskManager: RiskManager,
     private val portfolioService: PortfolioService,
     private val botStateStore: BotStateStore,
+    private val sanityChecks: BacktestSanityChecks,
+    private val reportService: ReportService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val csvLoader = CsvCandleLoader()
     private val lastReport = AtomicReference<BacktestReport?>(null)
+    private val simulator = BacktestSimulator(
+        properties = properties,
+        bybitProperties = bybitProperties,
+        candleResampler = candleResampler,
+        orderPriceService = orderPriceService,
+        sanityChecks = sanityChecks,
+    )
 
     suspend fun runIfConfigured() {
         val candles = loadCandles(null)
@@ -55,106 +62,34 @@ class BacktestRunner(
     }
 
     fun run(candles: List<Candle>): BacktestResult {
-        portfolioService.reset(properties.initialCapital)
-        val startTime = Instant.ofEpochMilli(candles.first().timeOpenMs)
-        riskManager.resetForBacktest(properties.initialCapital, startTime)
-
-        var equityPeak = properties.initialCapital
-        var maxDrawdown = BigDecimal.ZERO
-        val htfIntervalMs = IntervalUtil.intervalToMillis(bybitProperties.htfInterval)
-        val htfCandles = candleResampler.resample(candles, htfIntervalMs)
-        var htfIndex = 0
-
-        for (i in candles.indices) {
-            val window = candles.subList(0, i + 1)
-            val candle = candles[i]
-            val now = Instant.ofEpochMilli(candle.timeOpenMs)
-            while (htfIndex < htfCandles.size && htfCandles[htfIndex].timeOpenMs <= candle.timeOpenMs) {
-                htfIndex += 1
-            }
-            val htfWindow = if (htfIndex == 0) emptyList() else htfCandles.subList(0, htfIndex)
-
-            portfolioService.markToMarket(candle.close)
-            riskManager.updateEquity(portfolioService.equity.add(portfolioService.unrealizedPnl()), now)
-
-            val signal = strategyEngine.evaluate(window, htfWindow)
-            if (portfolioService.position.side == PositionSide.FLAT && signal.type == SignalType.ENTER_LONG) {
-                if (riskManager.canEnter(now)) {
-                    val stop = signal.stopPrice ?: continue
-                    val entry = signal.entryPrice ?: candle.close
-                    val takeProfit = signal.takeProfitPrice ?: entry
-                    val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, null) ?: continue
-                    val qty = riskManager.computeOrderQty(portfolioService.equity, priceLevels.entry, priceLevels.stop)
-                    if (qty > BigDecimal.ZERO) {
-                        val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = true)
-                        portfolioService.enterLong(
-                            qty = qty,
-                            price = fillPrice,
-                            stopPrice = priceLevels.stop,
-                            takeProfitPrice = priceLevels.takeProfit,
-                            feeRate = properties.feeRate,
-                            timeMs = candle.timeOpenMs,
-                        )
-                    }
-                }
-            }
-
-            val position = portfolioService.position
-            if (position.side == PositionSide.LONG) {
-                val stop = position.stopPrice
-                val takeProfit = position.takeProfitPrice
-                if (stop != null && candle.close <= stop) {
-                    val exitPrice = applySlippage(stop, properties.slippageBps, isBuy = false)
-                    val pnl = portfolioService.exitLong(exitPrice, properties.feeRate, candle.timeOpenMs)
-                    riskManager.recordTradeResult(pnl, now)
-                } else if (takeProfit != null && candle.close >= takeProfit) {
-                    val exitPrice = applySlippage(takeProfit, properties.slippageBps, isBuy = false)
-                    val pnl = portfolioService.exitLong(exitPrice, properties.feeRate, candle.timeOpenMs)
-                    riskManager.recordTradeResult(pnl, now)
-                }
-            }
-
-            val equity = portfolioService.equity.add(portfolioService.unrealizedPnl())
-            if (equity > equityPeak) equityPeak = equity
-            val drawdown = equityPeak.subtract(equity)
-                .divide(equityPeak, 6, RoundingMode.HALF_UP)
-            if (drawdown > maxDrawdown) maxDrawdown = drawdown
-
-            botStateStore.update(
-                mode = io.github.yaklede.elliott.wave.principle.coin.config.BotMode.BACKTEST,
-                symbol = "BACKTEST",
-                lastCandleTime = candle.timeOpenMs,
-                position = portfolioService.position,
-                lastSignal = signal.type.name,
-                killSwitchActive = riskManager.isKillSwitchActive(),
-            )
-        }
-
-        val trades = portfolioService.tradeHistory()
-        val wins = trades.count { it.pnl > BigDecimal.ZERO }
-        val winRate = if (trades.isEmpty()) BigDecimal.ZERO else {
-            BigDecimal(wins).divide(BigDecimal(trades.size), 4, RoundingMode.HALF_UP)
-        }
-        val grossProfit = trades.filter { it.pnl > BigDecimal.ZERO }
-            .fold(BigDecimal.ZERO) { acc, t -> acc.add(t.pnl) }
-        val grossLoss = trades.filter { it.pnl < BigDecimal.ZERO }
-            .fold(BigDecimal.ZERO) { acc, t -> acc.add(t.pnl.abs()) }
-        val profitFactor = if (grossLoss == BigDecimal.ZERO) BigDecimal.ZERO else {
-            grossProfit.divide(grossLoss, 4, RoundingMode.HALF_UP)
-        }
-
-        return BacktestResult(
-            trades = trades.size,
-            winRate = winRate,
-            profitFactor = profitFactor,
-            maxDrawdown = maxDrawdown,
-            finalEquity = portfolioService.equity,
-        )
+        return simulator.run(
+            candles = candles,
+            strategyEngine = strategyEngine,
+            riskManager = riskManager,
+            portfolioService = portfolioService,
+            botStateStore = botStateStore,
+            recordDecisions = false,
+        ).result
     }
 
     fun runReport(candles: List<Candle>): BacktestReport {
-        val result = run(candles)
-        val report = BacktestReport(result, portfolioService.tradeHistory())
+        val run = simulator.run(
+            candles = candles,
+            strategyEngine = strategyEngine,
+            riskManager = riskManager,
+            portfolioService = portfolioService,
+            botStateStore = botStateStore,
+            recordDecisions = true,
+        )
+        reportService.writeStrategyReport(
+            result = run.result,
+            trades = run.trades,
+            decisions = run.decisions,
+            outputDir = Path.of("build/reports"),
+            weakSlope = strategyProperties.regime.weakSlope,
+            strongSlope = strategyProperties.regime.strongSlope,
+        )
+        val report = BacktestReport(run.result, run.trades)
         lastReport.set(report)
         return report
     }
@@ -200,10 +135,4 @@ class BacktestRunner(
         return emptyList()
     }
 
-    private fun applySlippage(price: BigDecimal, bps: Int, isBuy: Boolean): BigDecimal {
-        if (bps <= 0) return price
-        val multiplier = BigDecimal(bps).divide(BigDecimal(10_000))
-        val adjustment = price.multiply(multiplier)
-        return if (isBuy) price.add(adjustment) else price.subtract(adjustment)
-    }
 }

@@ -4,8 +4,10 @@ import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BotMode
 import io.github.yaklede.elliott.wave.principle.coin.config.BotProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.ResearchProperties
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.MarketDataService
+import io.github.yaklede.elliott.wave.principle.coin.marketdata.IntervalUtil
 import io.github.yaklede.elliott.wave.principle.coin.portfolio.PortfolioService
 import io.github.yaklede.elliott.wave.principle.coin.portfolio.PortfolioStore
 import io.github.yaklede.elliott.wave.principle.coin.portfolio.PositionSide
@@ -13,6 +15,7 @@ import io.github.yaklede.elliott.wave.principle.coin.risk.RiskManager
 import io.github.yaklede.elliott.wave.principle.coin.risk.RiskStateStore
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.SignalType
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.StrategyEngine
+import io.github.yaklede.elliott.wave.principle.coin.domain.ExitReason
 import java.math.BigDecimal
 import java.time.Instant
 import java.util.UUID
@@ -32,6 +35,7 @@ class ExecutionEngine(
     private val botProperties: BotProperties,
     private val bybitProperties: BybitProperties,
     private val backtestProperties: BacktestProperties,
+    private val researchProperties: ResearchProperties,
     private val marketDataService: MarketDataService,
     private val strategyEngine: StrategyEngine,
     private val riskManager: RiskManager,
@@ -51,6 +55,10 @@ class ExecutionEngine(
 
     @EventListener(ApplicationReadyEvent::class)
     fun onReady() {
+        if (researchProperties.enabled) {
+            log.info("Research mode enabled; execution engine is idle")
+            return
+        }
         when (botProperties.mode) {
             BotMode.BACKTEST -> scope.launch { backtestRunner.runIfConfigured() }
             BotMode.PAPER -> startPaper(live = false)
@@ -103,6 +111,7 @@ class ExecutionEngine(
         htfCandles: List<io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle>,
         live: Boolean,
     ) {
+        val intervalMs = IntervalUtil.intervalToMillis(bybitProperties.interval)
         val now = Instant.ofEpochMilli(candleTimeMs)
         portfolioService.markToMarket(closePrice)
         riskManager.updateEquity(portfolioService.equity.add(portfolioService.unrealizedPnl()), now)
@@ -113,9 +122,10 @@ class ExecutionEngine(
 
         if (position.side == PositionSide.FLAT && signal.type == SignalType.ENTER_LONG) {
             if (riskManager.canEnter(now)) {
-                val stop = signal.stopPrice ?: return
+                val plan = signal.exitPlan ?: return
+                val stop = plan.stopPrice ?: return
                 val entry = signal.entryPrice ?: closePrice
-                val takeProfit = signal.takeProfitPrice ?: entry
+                val takeProfit = plan.takeProfitPrice ?: entry
                 val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit) ?: return
                 val qty = orderSizingService.computeQty(portfolioService.equity, priceLevels.entry, priceLevels.stop)
                 if (qty > BigDecimal.ZERO) {
@@ -135,8 +145,15 @@ class ExecutionEngine(
                         price = fillPrice,
                         stopPrice = priceLevels.stop,
                         takeProfitPrice = priceLevels.takeProfit,
+                        trailActivationPrice = plan.trailActivationPrice,
+                        trailDistance = plan.trailDistance,
+                        timeStopBars = plan.timeStopBars,
                         feeRate = backtestProperties.feeRate,
                         timeMs = candleTimeMs,
+                        entryReason = signal.entryReason,
+                        entryScore = signal.score,
+                        confidenceScore = signal.confidence,
+                        features = signal.features,
                     )
                     portfolioStore.save(portfolioService.snapshot())
                     riskStateStore.save(riskManager.snapshot())
@@ -148,18 +165,31 @@ class ExecutionEngine(
         if (openPosition.side == PositionSide.LONG) {
             val stop = openPosition.stopPrice
             val takeProfit = openPosition.takeProfitPrice
-            if (stop != null && closePrice <= stop) {
-                val exitPrice = applySlippage(stop, backtestProperties.slippageBps, isBuy = false)
-                val pnl = portfolioService.exitLong(exitPrice, backtestProperties.feeRate, candleTimeMs)
+            val exitReason = when {
+                stop != null && closePrice <= stop -> if (openPosition.trailingActive) ExitReason.TRAIL_STOP else ExitReason.STOP_INVALIDATION
+                takeProfit != null && closePrice >= takeProfit -> ExitReason.TAKE_PROFIT
+                else -> null
+            }
+            if (exitReason != null) {
+                val exitPrice = if (exitReason == ExitReason.TAKE_PROFIT) takeProfit!! else stop!!
+                val fill = applySlippage(exitPrice, backtestProperties.slippageBps, isBuy = false)
+                val pnl = portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, exitReason)
                 riskManager.recordTradeResult(pnl, now)
                 portfolioStore.save(portfolioService.snapshot())
                 riskStateStore.save(riskManager.snapshot())
-            } else if (takeProfit != null && closePrice >= takeProfit) {
-                val exitPrice = applySlippage(takeProfit, backtestProperties.slippageBps, isBuy = false)
-                val pnl = portfolioService.exitLong(exitPrice, backtestProperties.feeRate, candleTimeMs)
-                riskManager.recordTradeResult(pnl, now)
-                portfolioStore.save(portfolioService.snapshot())
-                riskStateStore.save(riskManager.snapshot())
+            } else {
+                val updated = updateTrailingStop(openPosition, closePrice)
+                if (updated != null) portfolioService.updateStopLoss(updated.first, updated.second)
+                if (openPosition.timeStopBars != null && openPosition.entryTimeMs != null) {
+                    val barsHeld = ((candleTimeMs - openPosition.entryTimeMs) / intervalMs) + 1
+                    if (barsHeld >= openPosition.timeStopBars) {
+                        val fill = applySlippage(closePrice, backtestProperties.slippageBps, isBuy = false)
+                        val pnl = portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, ExitReason.TIME_STOP)
+                        riskManager.recordTradeResult(pnl, now)
+                        portfolioStore.save(portfolioService.snapshot())
+                        riskStateStore.save(riskManager.snapshot())
+                    }
+                }
             }
         }
 
@@ -178,5 +208,18 @@ class ExecutionEngine(
         val multiplier = BigDecimal(bps).divide(BigDecimal(10_000))
         val adjustment = price.multiply(multiplier)
         return if (isBuy) price.add(adjustment) else price.subtract(adjustment)
+    }
+
+    private fun updateTrailingStop(
+        position: io.github.yaklede.elliott.wave.principle.coin.portfolio.Position,
+        closePrice: BigDecimal,
+    ): Pair<BigDecimal, Boolean>? {
+        val activation = position.trailActivationPrice ?: return null
+        val distance = position.trailDistance ?: return null
+        if (closePrice < activation) return null
+        val candidate = closePrice.subtract(distance)
+        val current = position.stopPrice ?: return null
+        if (candidate > current) return candidate to true
+        return null
     }
 }

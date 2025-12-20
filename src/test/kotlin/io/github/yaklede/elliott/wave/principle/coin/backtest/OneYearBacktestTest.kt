@@ -42,7 +42,8 @@ class OneYearBacktestTest {
             interval = "15",
             htfInterval = "60",
         )
-        val strategyEngine = StrategyEngine(StrategyProperties())
+        val strategyProperties = StrategyProperties()
+        val strategyEngine = StrategyEngine(strategyProperties)
         val riskManager = RiskManager(RiskProperties())
         val portfolioService = PortfolioService(backtestProperties)
         val botStateStore = BotStateStore()
@@ -50,6 +51,8 @@ class OneYearBacktestTest {
         val instrumentInfoService = mockk<InstrumentInfoService>(relaxed = true)
         val resampler = CandleResampler()
         val orderPriceService = OrderPriceService(instrumentInfoService, bybitProperties)
+        val sanityChecks = BacktestSanityChecks()
+        val reportService = ReportService(RegimeAnalyzer())
 
         val runner = BacktestRunner(
             properties = backtestProperties,
@@ -58,9 +61,12 @@ class OneYearBacktestTest {
             candleResampler = resampler,
             orderPriceService = orderPriceService,
             strategyEngine = strategyEngine,
+            strategyProperties = strategyProperties,
             riskManager = riskManager,
             portfolioService = portfolioService,
             botStateStore = botStateStore,
+            sanityChecks = sanityChecks,
+            reportService = reportService,
         )
 
         val candles = CsvCandleLoader().load(csvPath)

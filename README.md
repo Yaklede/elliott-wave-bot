@@ -58,6 +58,7 @@ BOT_ENABLE_LIVE=YES ./gradlew bootRun --args="--bot.mode=LIVE"
 BACKTEST_DATA_PATH=/path/to/1y.csv ./gradlew test --tests '*OneYearBacktestTest*'
 ```
 - The test prints a summary (trades, win rate, profit factor, max drawdown, final equity).
+ - Detailed reports are written to `build/reports/strategy-report.md`, `build/reports/trades.csv`, and `build/reports/features.csv`.
 
 ## Project Layout (Key Modules)
 - `marketdata/` — candle retrieval + in-memory cache
@@ -79,6 +80,30 @@ Risk state (kill switch + cooldown) is stored at `data/risk-state.json` by defau
 - `BACKTEST`: runs once using local CSV (or Bybit REST if start/end provided).
 - `PAPER` / `LIVE`: starts a coroutine loop that polls candles every ~15s and evaluates signals on candle close.
 - WebSocket public kline stream runs in parallel (for confirmed candles), and private WS runs only in LIVE with credentials.
+ - `research.enabled=true` runs the diagnostics/ablation/walk-forward pipeline and keeps the execution engine idle.
+
+## Research Pipeline
+Diagnostics report:
+```bash
+./gradlew runReport
+```
+
+Ablation comparisons:
+```bash
+./gradlew runAblation
+```
+
+Walk-forward validation:
+```bash
+./gradlew runWalkForward
+```
+
+Outputs are written to `build/reports/`:
+- `strategy-report.md`
+- `trades.csv`
+- `features.csv`
+- `ablation-report.md`
+- `walk-forward-report.md`
 
 ## Production Setup
 1) Prepare configuration (env + args):

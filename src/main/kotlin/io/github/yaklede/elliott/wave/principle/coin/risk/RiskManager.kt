@@ -1,6 +1,7 @@
 package io.github.yaklede.elliott.wave.principle.coin.risk
 
 import io.github.yaklede.elliott.wave.principle.coin.config.RiskProperties
+import io.github.yaklede.elliott.wave.principle.coin.domain.RejectReason
 import java.math.BigDecimal
 import java.math.RoundingMode
 import java.time.Clock
@@ -23,6 +24,14 @@ class RiskManager(
         if (state.killSwitchActive) return false
         if (cooldownUntil != null && now.isBefore(cooldownUntil)) return false
         return true
+    }
+
+    fun entryBlockReason(now: Instant = clock.instant()): RejectReason? {
+        updateDayBoundary(now)
+        val cooldownUntil = state.cooldownUntil
+        if (state.killSwitchActive) return RejectReason.RISK_KILLSWITCH
+        if (cooldownUntil != null && now.isBefore(cooldownUntil)) return RejectReason.COOLDOWN
+        return null
     }
 
     fun computeOrderQty(

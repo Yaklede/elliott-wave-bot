@@ -31,11 +31,36 @@ strategy:
     atrMultiplier: 2.0
   elliott:
     enforceWave4NoOverlap: true
-    minScoreToTrade: 0.65
+    minScoreToTrade: 0.60
+    swingAtrMultiplier: 2.0
     fib:
       wave2PreferredMin: 0.5
       wave2PreferredMax: 0.618
       takeProfitExtension: 1.618
+  volatility:
+    atrPeriod: 14
+    maxAtrPercent: 0.05
+  volume:
+    period: 20
+    minMultiplier: 1.0
+  features:
+    enableWaveFilter: true
+    enableTrendFilter: true
+    enableVolumeFilter: true
+    enableRegimeGate: false
+    entryModel: BASELINE
+    exitModel: FIXED
+  exit:
+    atrStopMultiplier: 1.5
+    atrTakeProfitMultiplier: 3.0
+    trailActivationAtr: 1.0
+    trailDistanceAtr: 1.0
+    timeStopBars: 32
+  regime:
+    slopeLookbackBars: 20
+    weakSlope: 0.002
+    strongSlope: 0.01
+    minTradesPerBucket: 12
 
 risk:
   riskPerTrade: 0.01
@@ -53,6 +78,17 @@ backtest:
   startMs:
   endMs:
   csvPath: data/sample_btcusdt_15m.csv
+
+research:
+  enabled: false
+  mode: REPORT
+  outputDir: build/reports
+  walkForward:
+    trainDays: 90
+    testDays: 30
+    minTrades: 8
+    maxTrials: 12
+    enableRegimeGate: true
 
 portfolio:
   statePath: data/portfolio-state.json

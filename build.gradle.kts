@@ -45,3 +45,27 @@ kotlin {
 tasks.withType<Test> {
 	useJUnitPlatform()
 }
+
+tasks.register<JavaExec>("runReport") {
+	group = "research"
+	description = "Run backtest diagnostics report"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.yaklede.elliott.wave.principle.coin.ApplicationKt")
+	args("--bot.mode=BACKTEST", "--research.enabled=true", "--research.mode=REPORT")
+}
+
+tasks.register<JavaExec>("runAblation") {
+	group = "research"
+	description = "Run ablation comparisons"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.yaklede.elliott.wave.principle.coin.ApplicationKt")
+	args("--bot.mode=BACKTEST", "--research.enabled=true", "--research.mode=ABLATION")
+}
+
+tasks.register<JavaExec>("runWalkForward") {
+	group = "research"
+	description = "Run walk-forward validation"
+	classpath = sourceSets["main"].runtimeClasspath
+	mainClass.set("io.github.yaklede.elliott.wave.principle.coin.ApplicationKt")
+	args("--bot.mode=BACKTEST", "--research.enabled=true", "--research.mode=WALK_FORWARD")
+}
