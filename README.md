@@ -50,6 +50,14 @@ BOT_ENABLE_LIVE=YES ./gradlew bootRun --args="--bot.mode=LIVE"
   - Optional body: `{ "csvPath": "...", "startMs": 1700000000000, "endMs": 1700500000000 }`
 - `GET /api/backtest/last` returns the most recent backtest report.
 
+## Backtest as Test Code (1 year)
+- Place a 1-year CSV at `data/bybit_btcusdt_15m_1y.csv` or set `BACKTEST_DATA_PATH`.
+- Run:
+```bash
+BACKTEST_DATA_PATH=/path/to/1y.csv ./gradlew test --tests '*OneYearBacktestTest*'
+```
+- The test prints a summary (trades, win rate, profit factor, max drawdown, final equity).
+
 ## Project Layout (Key Modules)
 - `marketdata/` — candle retrieval + in-memory cache
 - `exchange/bybit/` — REST + WS skeleton + signing + private stream
@@ -65,6 +73,19 @@ Defaults live in `src/main/resources/application.yml` and target testnet + BACKT
 Portfolio state (PAPER/LIVE) is stored at `data/portfolio-state.json` by default.
 Risk state (kill switch + cooldown) is stored at `data/risk-state.json` by default.
 
+## Execution Flow (No Scheduler)
+- Spring Boot starts `ExecutionEngine` on `ApplicationReadyEvent`.
+- `BACKTEST`: runs once using local CSV (or Bybit REST if start/end provided).
+- `PAPER` / `LIVE`: starts a coroutine loop that polls candles every ~15s and evaluates signals on candle close.
+- WebSocket public kline stream runs in parallel (for confirmed candles), and private WS runs only in LIVE with credentials.
+
+## Production Setup
+1) Prepare configuration (env + args):
+   - `BYBIT_API_KEY`, `BYBIT_API_SECRET` for LIVE only
+   - `BOT_ENABLE_LIVE=YES` and `--bot.mode=LIVE` to enable real orders
+2) Mount a persistent volume for `data/` (portfolio + risk state, optional backtest CSV).
+3) Run the container with explicit mode and config args.
+
 ## Docker
 Build:
 ```bash
@@ -74,4 +95,14 @@ docker build -t elliott-wave-bot:latest .
 Run (paper mode):
 ```bash
 docker run --rm -p 8080:8080 elliott-wave-bot:latest --bot.mode=PAPER
+```
+
+Run (live mode, explicitly gated):
+```bash
+docker run --rm -p 8080:8080 \\
+  -e BOT_ENABLE_LIVE=YES \\
+  -e BYBIT_API_KEY=*** \\
+  -e BYBIT_API_SECRET=*** \\
+  -v $(pwd)/data:/app/data \\
+  elliott-wave-bot:latest --bot.mode=LIVE
 ```
