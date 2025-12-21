@@ -91,12 +91,7 @@ strategy:
       volumeHigh: 1.664459
     blocked: []
     allowed:
-      - UP_WEAK|MID|LOW
-      - UP_WEAK|HIGH|LOW
-      - UP_WEAK|MID|NORMAL
-      - UP_STRONG|MID|HIGH
       - UP_STRONG|LOW|HIGH
-      - FLAT|HIGH|NORMAL
       - FLAT|HIGH|HIGH
 
 risk:
