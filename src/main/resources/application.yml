@@ -82,11 +82,11 @@ strategy:
     stdDevMultiplier: 2.0
   pyramiding:
     enabled: true
-    maxAdds: 1
-    addOnRiskFraction: 0.5
+    maxAdds: 2
+    addOnRiskFraction: 0.6
     minBarsBetweenAdds: 4
     triggerModel: ATR_MOVE
-    minMoveAtr: 0.8
+    minMoveAtr: 0.5
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002
