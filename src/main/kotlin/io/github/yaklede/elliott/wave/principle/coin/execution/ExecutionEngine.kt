@@ -122,42 +122,66 @@ class ExecutionEngine(
         val signal = strategyEngine.evaluate(candles, htfCandles, gate)
         val position = portfolioService.position
 
-        if (position.side == PositionSide.FLAT && signal.type == SignalType.ENTER_LONG) {
+        if (position.side == PositionSide.FLAT && (signal.type == SignalType.ENTER_LONG || signal.type == SignalType.ENTER_SHORT)) {
             if (riskManager.canEnter(now)) {
                 val plan = signal.exitPlan ?: return
                 val stop = plan.stopPrice ?: return
                 val entry = signal.entryPrice ?: closePrice
                 val takeProfit = plan.takeProfitPrice ?: entry
-                val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit) ?: return
+                val isLong = signal.type == SignalType.ENTER_LONG
+                val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, isLong) ?: return
                 val qty = orderSizingService.computeQty(portfolioService.equity, priceLevels.entry, priceLevels.stop)
                 if (qty > BigDecimal.ZERO) {
                     if (live) {
+                        if (!isLong) {
+                            log.warn("Live short entries are not supported for spot market orders; skipping trade")
+                            return
+                        }
                         liveModeGuard.ensureLiveAllowed()
                         val orderLinkId = UUID.randomUUID().toString()
                         bybitV5Client.placeOrderSpotMarket(
                             symbol = bybitProperties.symbol,
-                            side = "Buy",
+                            side = if (isLong) "Buy" else "Sell",
                             qty = qty,
                             orderLinkId = orderLinkId,
                         )
                     }
-                    val fillPrice = applySlippage(priceLevels.entry, backtestProperties.slippageBps, isBuy = true)
-                    portfolioService.enterLong(
-                        qty = qty,
-                        price = fillPrice,
-                        stopPrice = priceLevels.stop,
-                        takeProfitPrice = priceLevels.takeProfit,
-                        trailActivationPrice = plan.trailActivationPrice,
-                        trailDistance = plan.trailDistance,
-                        timeStopBars = plan.timeStopBars,
-                        breakEvenPrice = plan.breakEvenPrice,
-                        feeRate = backtestProperties.feeRate,
-                        timeMs = candleTimeMs,
-                        entryReason = signal.entryReason,
-                        entryScore = signal.score,
-                        confidenceScore = signal.confidence,
-                        features = signal.features,
-                    )
+                    val fillPrice = applySlippage(priceLevels.entry, backtestProperties.slippageBps, isBuy = isLong)
+                    if (isLong) {
+                        portfolioService.enterLong(
+                            qty = qty,
+                            price = fillPrice,
+                            stopPrice = priceLevels.stop,
+                            takeProfitPrice = priceLevels.takeProfit,
+                            trailActivationPrice = plan.trailActivationPrice,
+                            trailDistance = plan.trailDistance,
+                            timeStopBars = plan.timeStopBars,
+                            breakEvenPrice = plan.breakEvenPrice,
+                            feeRate = backtestProperties.feeRate,
+                            timeMs = candleTimeMs,
+                            entryReason = signal.entryReason,
+                            entryScore = signal.score,
+                            confidenceScore = signal.confidence,
+                            features = signal.features,
+                        )
+                    } else {
+                        portfolioService.enterShort(
+                            qty = qty,
+                            price = fillPrice,
+                            stopPrice = priceLevels.stop,
+                            takeProfitPrice = priceLevels.takeProfit,
+                            trailActivationPrice = plan.trailActivationPrice,
+                            trailDistance = plan.trailDistance,
+                            timeStopBars = plan.timeStopBars,
+                            breakEvenPrice = plan.breakEvenPrice,
+                            feeRate = backtestProperties.feeRate,
+                            timeMs = candleTimeMs,
+                            entryReason = signal.entryReason,
+                            entryScore = signal.score,
+                            confidenceScore = signal.confidence,
+                            features = signal.features,
+                        )
+                    }
                     portfolioStore.save(portfolioService.snapshot())
                     riskStateStore.save(riskManager.snapshot())
                 }
@@ -165,27 +189,53 @@ class ExecutionEngine(
         }
 
         val openPosition = portfolioService.position
-        if (openPosition.side == PositionSide.LONG) {
+        if (openPosition.side == PositionSide.LONG || openPosition.side == PositionSide.SHORT) {
             val stop = openPosition.stopPrice
             val takeProfit = openPosition.takeProfitPrice
-            val exitReason = when {
-                stop != null && closePrice <= stop -> if (openPosition.trailingActive) ExitReason.TRAIL_STOP else ExitReason.STOP_INVALIDATION
-                takeProfit != null && closePrice >= takeProfit -> ExitReason.TAKE_PROFIT
+            val exitReason = when (openPosition.side) {
+                PositionSide.LONG -> when {
+                    stop != null && closePrice <= stop -> if (openPosition.trailingActive) ExitReason.TRAIL_STOP else ExitReason.STOP_INVALIDATION
+                    takeProfit != null && closePrice >= takeProfit -> ExitReason.TAKE_PROFIT
+                    else -> null
+                }
+                PositionSide.SHORT -> when {
+                    stop != null && closePrice >= stop -> if (openPosition.trailingActive) ExitReason.TRAIL_STOP else ExitReason.STOP_INVALIDATION
+                    takeProfit != null && closePrice <= takeProfit -> ExitReason.TAKE_PROFIT
+                    else -> null
+                }
                 else -> null
             }
             if (exitReason != null) {
                 val exitPrice = if (exitReason == ExitReason.TAKE_PROFIT) takeProfit!! else stop!!
-                val fill = applySlippage(exitPrice, backtestProperties.slippageBps, isBuy = false)
-                val pnl = portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, exitReason)
+                val fill = applySlippage(exitPrice, backtestProperties.slippageBps, isBuy = openPosition.side == PositionSide.SHORT)
+                val pnl = if (openPosition.side == PositionSide.LONG) {
+                    portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, exitReason)
+                } else {
+                    portfolioService.exitShort(fill, backtestProperties.feeRate, candleTimeMs, exitReason)
+                }
                 riskManager.recordTradeResult(pnl, now)
                 portfolioStore.save(portfolioService.snapshot())
                 riskStateStore.save(riskManager.snapshot())
             } else {
                 val breakEven = openPosition.breakEvenPrice
-                if (breakEven != null && closePrice >= breakEven) {
-                    val currentStop = openPosition.stopPrice
-                    if (currentStop != null && currentStop < openPosition.avgPrice) {
-                        portfolioService.updateStopLoss(openPosition.avgPrice, openPosition.trailingActive)
+                if (breakEven != null) {
+                    val shouldMove = when (openPosition.side) {
+                        PositionSide.LONG -> closePrice >= breakEven
+                        PositionSide.SHORT -> closePrice <= breakEven
+                        else -> false
+                    }
+                    if (shouldMove) {
+                        val currentStop = openPosition.stopPrice
+                        if (currentStop != null) {
+                            val shouldUpdate = when (openPosition.side) {
+                                PositionSide.LONG -> currentStop < openPosition.avgPrice
+                                PositionSide.SHORT -> currentStop > openPosition.avgPrice
+                                else -> false
+                            }
+                            if (shouldUpdate) {
+                                portfolioService.updateStopLoss(openPosition.avgPrice, openPosition.trailingActive)
+                            }
+                        }
                     }
                 }
                 val updated = updateTrailingStop(openPosition, closePrice)
@@ -193,8 +243,12 @@ class ExecutionEngine(
                 if (openPosition.timeStopBars != null && openPosition.entryTimeMs != null) {
                     val barsHeld = ((candleTimeMs - openPosition.entryTimeMs) / intervalMs) + 1
                     if (barsHeld >= openPosition.timeStopBars) {
-                        val fill = applySlippage(closePrice, backtestProperties.slippageBps, isBuy = false)
-                        val pnl = portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, ExitReason.TIME_STOP)
+                        val fill = applySlippage(closePrice, backtestProperties.slippageBps, isBuy = openPosition.side == PositionSide.SHORT)
+                        val pnl = if (openPosition.side == PositionSide.LONG) {
+                            portfolioService.exitLong(fill, backtestProperties.feeRate, candleTimeMs, ExitReason.TIME_STOP)
+                        } else {
+                            portfolioService.exitShort(fill, backtestProperties.feeRate, candleTimeMs, ExitReason.TIME_STOP)
+                        }
                         riskManager.recordTradeResult(pnl, now)
                         portfolioStore.save(portfolioService.snapshot())
                         riskStateStore.save(riskManager.snapshot())
@@ -226,10 +280,19 @@ class ExecutionEngine(
     ): Pair<BigDecimal, Boolean>? {
         val activation = position.trailActivationPrice ?: return null
         val distance = position.trailDistance ?: return null
-        if (closePrice < activation) return null
-        val candidate = closePrice.subtract(distance)
         val current = position.stopPrice ?: return null
-        if (candidate > current) return candidate to true
-        return null
+        return when (position.side) {
+            PositionSide.LONG -> {
+                if (closePrice < activation) return null
+                val candidate = closePrice.subtract(distance)
+                if (candidate > current) candidate to true else null
+            }
+            PositionSide.SHORT -> {
+                if (closePrice > activation) return null
+                val candidate = closePrice.add(distance)
+                if (candidate < current) candidate to true else null
+            }
+            else -> null
+        }
     }
 }

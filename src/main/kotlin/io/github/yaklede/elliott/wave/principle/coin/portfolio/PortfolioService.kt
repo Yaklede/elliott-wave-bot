@@ -43,6 +43,46 @@ class PortfolioService(
             side = PositionSide.LONG,
             qty = qty,
             avgPrice = price,
+            entryFee = fee,
+            stopPrice = stopPrice,
+            takeProfitPrice = takeProfitPrice,
+            trailActivationPrice = trailActivationPrice,
+            trailDistance = trailDistance,
+            timeStopBars = timeStopBars,
+            breakEvenPrice = breakEvenPrice,
+            entryTimeMs = timeMs,
+            entryReason = entryReason,
+            entryScore = entryScore,
+            confidenceScore = confidenceScore,
+            features = features,
+        )
+        lastMarkPrice = price
+    }
+
+    fun enterShort(
+        qty: BigDecimal,
+        price: BigDecimal,
+        stopPrice: BigDecimal,
+        takeProfitPrice: BigDecimal,
+        trailActivationPrice: BigDecimal? = null,
+        trailDistance: BigDecimal? = null,
+        timeStopBars: Int? = null,
+        breakEvenPrice: BigDecimal? = null,
+        feeRate: BigDecimal,
+        timeMs: Long,
+        entryReason: io.github.yaklede.elliott.wave.principle.coin.domain.EntryReason? = null,
+        entryScore: BigDecimal? = null,
+        confidenceScore: BigDecimal? = null,
+        features: io.github.yaklede.elliott.wave.principle.coin.domain.RegimeFeatures? = null,
+    ) {
+        if (position.side != PositionSide.FLAT) return
+        val fee = price.multiply(qty).multiply(feeRate)
+        mutableEquity = mutableEquity.subtract(fee)
+        mutablePosition = Position(
+            side = PositionSide.SHORT,
+            qty = qty,
+            avgPrice = price,
+            entryFee = fee,
             stopPrice = stopPrice,
             takeProfitPrice = takeProfitPrice,
             trailActivationPrice = trailActivationPrice,
@@ -65,15 +105,21 @@ class PortfolioService(
         exitReason: io.github.yaklede.elliott.wave.principle.coin.domain.ExitReason? = null,
     ): BigDecimal {
         if (position.side != PositionSide.LONG) return BigDecimal.ZERO
-        val pnl = price.subtract(mutablePosition.avgPrice).multiply(mutablePosition.qty)
-        val fee = price.multiply(mutablePosition.qty).multiply(feeRate)
-        mutableEquity = mutableEquity.add(pnl).subtract(fee)
+        val grossPnl = price.subtract(mutablePosition.avgPrice).multiply(mutablePosition.qty)
+        val exitFee = price.multiply(mutablePosition.qty).multiply(feeRate)
+        val entryFee = mutablePosition.entryFee ?: BigDecimal.ZERO
+        val netPnl = grossPnl.subtract(entryFee).subtract(exitFee)
+        mutableEquity = mutableEquity.add(grossPnl).subtract(exitFee)
         trades.add(
             TradeRecord(
+                side = PositionSide.LONG,
                 entryPrice = mutablePosition.avgPrice,
                 exitPrice = price,
                 qty = mutablePosition.qty,
-                pnl = pnl.subtract(fee),
+                pnl = netPnl,
+                grossPnl = grossPnl,
+                entryFee = entryFee,
+                exitFee = exitFee,
                 entryTimeMs = mutablePosition.entryTimeMs ?: 0L,
                 exitTimeMs = timeMs,
                 entryReason = mutablePosition.entryReason,
@@ -85,7 +131,43 @@ class PortfolioService(
         )
         mutablePosition = Position.flat()
         lastMarkPrice = price
-        return pnl.subtract(fee)
+        return netPnl
+    }
+
+    fun exitShort(
+        price: BigDecimal,
+        feeRate: BigDecimal,
+        timeMs: Long,
+        exitReason: io.github.yaklede.elliott.wave.principle.coin.domain.ExitReason? = null,
+    ): BigDecimal {
+        if (position.side != PositionSide.SHORT) return BigDecimal.ZERO
+        val grossPnl = mutablePosition.avgPrice.subtract(price).multiply(mutablePosition.qty)
+        val exitFee = price.multiply(mutablePosition.qty).multiply(feeRate)
+        val entryFee = mutablePosition.entryFee ?: BigDecimal.ZERO
+        val netPnl = grossPnl.subtract(entryFee).subtract(exitFee)
+        mutableEquity = mutableEquity.add(grossPnl).subtract(exitFee)
+        trades.add(
+            TradeRecord(
+                side = PositionSide.SHORT,
+                entryPrice = mutablePosition.avgPrice,
+                exitPrice = price,
+                qty = mutablePosition.qty,
+                pnl = netPnl,
+                grossPnl = grossPnl,
+                entryFee = entryFee,
+                exitFee = exitFee,
+                entryTimeMs = mutablePosition.entryTimeMs ?: 0L,
+                exitTimeMs = timeMs,
+                entryReason = mutablePosition.entryReason,
+                exitReason = exitReason,
+                entryScore = mutablePosition.entryScore,
+                confidenceScore = mutablePosition.confidenceScore,
+                features = mutablePosition.features,
+            )
+        )
+        mutablePosition = Position.flat()
+        lastMarkPrice = price
+        return netPnl
     }
 
     fun markToMarket(price: BigDecimal) {
@@ -93,14 +175,17 @@ class PortfolioService(
     }
 
     fun updateStopLoss(newStop: BigDecimal, trailingActive: Boolean = position.trailingActive) {
-        if (position.side != PositionSide.LONG) return
+        if (position.side == PositionSide.FLAT) return
         mutablePosition = mutablePosition.copy(stopPrice = newStop, trailingActive = trailingActive)
     }
 
     fun unrealizedPnl(): BigDecimal {
         val mark = lastMarkPrice ?: return BigDecimal.ZERO
-        if (mutablePosition.side != PositionSide.LONG) return BigDecimal.ZERO
-        return mark.subtract(mutablePosition.avgPrice).multiply(mutablePosition.qty)
+        return when (mutablePosition.side) {
+            PositionSide.LONG -> mark.subtract(mutablePosition.avgPrice).multiply(mutablePosition.qty)
+            PositionSide.SHORT -> mutablePosition.avgPrice.subtract(mark).multiply(mutablePosition.qty)
+            PositionSide.FLAT -> BigDecimal.ZERO
+        }
     }
 
     fun tradeHistory(): List<TradeRecord> = trades.toList()

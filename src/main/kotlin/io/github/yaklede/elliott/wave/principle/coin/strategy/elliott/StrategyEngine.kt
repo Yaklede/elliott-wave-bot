@@ -1,7 +1,9 @@
 package io.github.yaklede.elliott.wave.principle.coin.strategy.elliott
 
+import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.EntryModel
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.TrendStrengthModel
 import io.github.yaklede.elliott.wave.principle.coin.domain.EntryReason
 import io.github.yaklede.elliott.wave.principle.coin.domain.RegimeBucketer
 import io.github.yaklede.elliott.wave.principle.coin.domain.RegimeGate
@@ -15,6 +17,7 @@ import org.springframework.stereotype.Component
 @Component
 class StrategyEngine(
     private val properties: StrategyProperties,
+    private val backtestProperties: BacktestProperties,
 ) {
     private val zigZagExtractor = ZigZagExtractor(properties.zigzag)
     private val detector = ElliottWaveDetector()
@@ -22,6 +25,10 @@ class StrategyEngine(
     private val atrCalculator = ATRCalculator()
     private val featureCalculator = RegimeFeatureCalculator(atrCalculator)
     private val exitPlanBuilder = ExitPlanBuilder(properties)
+    private val feeAwareGate = FeeAwareGate(properties.feeAware, backtestProperties.feeRate, backtestProperties.slippageBps)
+    private val erCalculator = EfficiencyRatioCalculator()
+    private val adxCalculator = AdxCalculator()
+    private val volExpansionFilter = VolatilityExpansionFilter(properties.volExpansion)
 
     fun evaluate(
         candles: List<Candle>,
@@ -41,11 +48,17 @@ class StrategyEngine(
         if (properties.features.enableTrendFilter && !passesTrendFilter(htfCandles)) {
             return hold(RejectReason.TREND_FILTER, features)
         }
+        if (!passesTrendStrengthFilter(htfCandles)) {
+            return hold(RejectReason.TREND_STRENGTH_FILTER, features)
+        }
         if (!passesVolatilityFilter(candles)) {
             return hold(RejectReason.VOLATILITY_FILTER, features)
         }
         if (properties.features.enableVolumeFilter && !passesVolumeFilter(candles)) {
             return hold(RejectReason.VOLUME_FILTER, features)
+        }
+        if (!passesVolExpansionFilter(candles)) {
+            return hold(RejectReason.VOL_EXPANSION_FILTER, features)
         }
         if (properties.features.enableRegimeGate && regimeGate != null && features != null) {
             val bucket = RegimeBucketer.bucket(
@@ -60,7 +73,15 @@ class StrategyEngine(
         }
 
         return if (properties.features.enableWaveFilter) {
-            evaluateWave(candles, htfCandles, features)
+            val waveSignal = evaluateWave(candles, htfCandles, features)
+            if (properties.features.enableSwingFallback &&
+                waveSignal.type == SignalType.HOLD &&
+                waveSignal.rejectReason == RejectReason.NO_SETUP
+            ) {
+                evaluateSwingBreak(candles, features)
+            } else {
+                waveSignal
+            }
         } else {
             evaluateSwingBreak(candles, features)
         }
@@ -105,7 +126,11 @@ class StrategyEngine(
                 stopCandidate = wave2.wave1Start.price,
                 takeProfitCandidate = fixedTakeProfit,
                 atrValue = atrValue,
+                isLong = true,
             )
+            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+                return hold(RejectReason.FEE_EDGE_FILTER, features, score, confidence)
+            }
             if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
                 return hold(RejectReason.STOP_DISTANCE, features, score, confidence)
             }
@@ -132,26 +157,31 @@ class StrategyEngine(
         if (lastHigh == null || lastLow == null) return hold(RejectReason.NO_SETUP, features)
 
         val lastClose = candles.last().close
-        val prevHigh = candles[candles.size - 2].high
-        val entryOk = when (properties.features.entryModel) {
-            EntryModel.MOMENTUM_CONFIRM -> lastClose > prevHigh
-            else -> true
-        }
-        if (!entryOk) return hold(RejectReason.LOW_SCORE, features)
+        val prev = candles[candles.size - 2]
+        val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
+            .lastOrNull { it != null }
 
         if (lastClose > lastHigh.price) {
+            val entryOk = when (properties.features.entryModel) {
+                EntryModel.MOMENTUM_CONFIRM -> lastClose > prev.high
+                else -> true
+            }
+            if (!entryOk) return hold(RejectReason.LOW_SCORE, features)
+
             val stop = lastLow.price
             val takeProfit = lastClose.add(
                 lastClose.subtract(stop).multiply(properties.elliott.fib.takeProfitExtension)
             )
-            val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
-                .lastOrNull { it != null }
             val exitPlan = exitPlanBuilder.build(
                 entryPrice = lastClose,
                 stopCandidate = stop,
                 takeProfitCandidate = takeProfit,
                 atrValue = atrValue,
+                isLong = true,
             )
+            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+                return hold(RejectReason.FEE_EDGE_FILTER, features)
+            }
             if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
                 return hold(RejectReason.STOP_DISTANCE, features)
             }
@@ -168,6 +198,46 @@ class StrategyEngine(
                 features = features,
             )
         }
+
+        if (lastClose < lastLow.price) {
+            val entryOk = when (properties.features.entryModel) {
+                EntryModel.MOMENTUM_CONFIRM -> lastClose < prev.low
+                else -> true
+            }
+            if (!entryOk) return hold(RejectReason.LOW_SCORE, features)
+
+            val stop = lastHigh.price
+            val riskDistance = stop.subtract(lastClose)
+            val takeProfit = lastClose.subtract(
+                riskDistance.multiply(properties.elliott.fib.takeProfitExtension)
+            )
+            val exitPlan = exitPlanBuilder.build(
+                entryPrice = lastClose,
+                stopCandidate = stop,
+                takeProfitCandidate = takeProfit,
+                atrValue = atrValue,
+                isLong = false,
+            )
+            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+                return hold(RejectReason.FEE_EDGE_FILTER, features)
+            }
+            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+                return hold(RejectReason.STOP_DISTANCE, features)
+            }
+            if (isRewardRiskTooLow(lastClose, exitPlan)) {
+                return hold(RejectReason.LOW_REWARD_RISK, features)
+            }
+            return TradeSignal(
+                type = SignalType.ENTER_SHORT,
+                entryPrice = lastClose,
+                exitPlan = exitPlan,
+                score = null,
+                confidence = null,
+                entryReason = EntryReason.SWING_BREAKDOWN,
+                features = features,
+            )
+        }
+
         return hold(RejectReason.NO_SETUP, features)
     }
 
@@ -189,6 +259,17 @@ class StrategyEngine(
         val sma50 = sma(htfCandles.takeLast(50))
         val sma200 = sma(htfCandles.takeLast(200))
         return sma50 > sma200
+    }
+
+    private fun passesTrendStrengthFilter(htfCandles: List<Candle>): Boolean {
+        if (!properties.trendStrength.enabled) return true
+        if (htfCandles.isEmpty()) return true
+        val threshold = properties.trendStrength.threshold
+        val value = when (properties.trendStrength.model) {
+            TrendStrengthModel.ER -> erCalculator.compute(htfCandles, properties.trendStrength.n)
+            TrendStrengthModel.ADX -> adxCalculator.compute(htfCandles, properties.trendStrength.n)
+        } ?: return true
+        return value >= threshold
     }
 
     private fun passesVolatilityFilter(candles: List<Candle>): Boolean {
@@ -214,6 +295,8 @@ class StrategyEngine(
         val lastVolume = candles.last().volume
         return lastVolume >= avg.multiply(properties.volume.minMultiplier)
     }
+
+    private fun passesVolExpansionFilter(candles: List<Candle>): Boolean = volExpansionFilter.passes(candles)
 
     private fun sma(candles: List<Candle>): BigDecimal {
         val sum = candles.fold(BigDecimal.ZERO) { acc, candle -> acc.add(candle.close) }

@@ -27,6 +27,7 @@ class ExitPlanBuilderTest {
             stopCandidate = BigDecimal("90"),
             takeProfitCandidate = BigDecimal("130"),
             atrValue = BigDecimal("2"),
+            isLong = true,
         )
         assertEquals(0, plan.stopPrice!!.compareTo(BigDecimal("96")))
         assertEquals(0, plan.takeProfitPrice!!.compareTo(BigDecimal("106")))

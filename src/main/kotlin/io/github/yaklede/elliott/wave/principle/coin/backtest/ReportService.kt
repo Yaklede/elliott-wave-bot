@@ -26,30 +26,38 @@ class ReportService(
         val tradesPath = outputDir.resolve("trades.csv")
         val featuresPath = outputDir.resolve("features.csv")
 
-        val metrics = metricsCalculator.computeTradeMetrics(trades)
+        val metricsNet = metricsCalculator.computeTradeMetrics(trades)
+        val metricsGross = metricsCalculator.computeGrossTradeMetrics(trades)
         val distribution = metricsCalculator.computeDistribution(trades)
         val holding = metricsCalculator.computeHolding(trades)
+        val feeMetrics = metricsCalculator.computeFeeMetrics(trades)
         val losingPatterns = topLosingPatterns(trades)
         val rejectCounts = decisions.mapNotNull { it.rejectReason }.groupingBy { it }.eachCount()
         val regime = regimeAnalyzer.analyze(trades, weakSlope, strongSlope)
         val suggestedBlocks = regime.metrics
             .filter { it.trades >= minTradesPerBucket && it.expectancy < BigDecimal.ZERO }
             .map { it.bucket }
+        val grossProfitFactor = profitFactor(trades) { it.grossPnl }
+        val netProfitFactor = profitFactor(trades) { it.pnl }
 
         val report = buildString {
             appendLine("# Strategy Report")
             appendLine()
             appendLine("## Summary")
             appendLine("- Trades: ${result.trades}")
-            appendLine("- Win rate: ${result.winRate}")
-            appendLine("- Profit factor: ${result.profitFactor}")
+            appendLine("- Win rate (net): ${metricsNet.winRate}")
+            appendLine("- Profit factor (gross): $grossProfitFactor")
+            appendLine("- Profit factor (net): $netProfitFactor")
             appendLine("- Max drawdown: ${result.maxDrawdown}")
             appendLine("- Final equity: ${result.finalEquity}")
-            appendLine("- Expectancy per trade: ${metrics.expectancy}")
+            appendLine("- Expectancy gross: ${metricsGross.expectancy}")
+            appendLine("- Expectancy net: ${metricsNet.expectancy}")
+            appendLine("- Avg fee per trade: ${feeMetrics.avgFeePerTrade}")
+            appendLine("- Fee drag (bps/trade): ${feeMetrics.feeDragBpsPerTrade}")
             appendLine()
             appendLine("## Distribution")
-            appendLine("- Avg win: ${metrics.avgWin}")
-            appendLine("- Avg loss: ${metrics.avgLoss}")
+            appendLine("- Avg win (net): ${metricsNet.avgWin}")
+            appendLine("- Avg loss (net): ${metricsNet.avgLoss}")
             appendLine("- Median pnl: ${distribution.median}")
             appendLine("- P25/P75 pnl: ${distribution.p25} / ${distribution.p75}")
             appendLine("- Largest win: ${distribution.largestWin}")
@@ -124,7 +132,8 @@ class ReportService(
 
     private fun writeTradesCsv(path: Path, trades: List<TradeRecord>) {
         val header = listOf(
-            "entryTimeMs", "exitTimeMs", "entryPrice", "exitPrice", "qty", "pnl",
+            "entryTimeMs", "exitTimeMs", "side", "entryPrice", "exitPrice", "qty",
+            "grossPnl", "netPnl", "entryFee", "exitFee",
             "entryReason", "exitReason", "score", "confidence",
             "trendSlope", "maSpread", "atrPercent", "relVolume",
         ).joinToString(",")
@@ -133,10 +142,14 @@ class ReportService(
             listOf(
                 trade.entryTimeMs,
                 trade.exitTimeMs,
+                trade.side,
                 trade.entryPrice,
                 trade.exitPrice,
                 trade.qty,
+                trade.grossPnl,
                 trade.pnl,
+                trade.entryFee,
+                trade.exitFee,
                 trade.entryReason,
                 trade.exitReason,
                 trade.entryScore,
@@ -169,6 +182,19 @@ class ReportService(
         Files.writeString(path, header + "\n", StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)
         if (lines.isNotEmpty()) {
             Files.write(path, lines.map { it + "\n" }, StandardOpenOption.APPEND)
+        }
+    }
+
+    private fun profitFactor(
+        trades: List<TradeRecord>,
+        pnlSelector: (TradeRecord) -> BigDecimal,
+    ): BigDecimal {
+        val grossProfit = trades.filter { pnlSelector(it) > BigDecimal.ZERO }
+            .fold(BigDecimal.ZERO) { acc, t -> acc.add(pnlSelector(t)) }
+        val grossLoss = trades.filter { pnlSelector(it) < BigDecimal.ZERO }
+            .fold(BigDecimal.ZERO) { acc, t -> acc.add(pnlSelector(t).abs()) }
+        return if (grossLoss == BigDecimal.ZERO) BigDecimal.ZERO else {
+            grossProfit.divide(grossLoss, 4, java.math.RoundingMode.HALF_UP)
         }
     }
 
