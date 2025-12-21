@@ -82,11 +82,11 @@ strategy:
     stdDevMultiplier: 2.0
   pyramiding:
     enabled: true
-    maxAdds: 3
-    addOnRiskFraction: 0.8
+    maxAdds: 4
+    addOnRiskFraction: 0.9
     minBarsBetweenAdds: 4
     triggerModel: ATR_MOVE
-    minMoveAtr: 0.3
+    minMoveAtr: 0.2
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002
@@ -109,7 +109,7 @@ strategy:
       - DOWN_STRONG|HIGH|HIGH
 
 risk:
-  riskPerTrade: 0.08
+  riskPerTrade: 0.10
   dailyMaxDd: 0.20
   maxConsecutiveLosses: 3
   cooldownMinutes: 60
@@ -120,11 +120,11 @@ risk:
   compounding:
     enabled: true
     minRiskPerTrade: 0.02
-    maxRiskPerTrade: 0.25
-    scaleUp: 1.25
+    maxRiskPerTrade: 0.30
+    scaleUp: 1.30
     scaleDown: 0.85
     minMultiplier: 0.5
-    maxMultiplier: 6.0
+    maxMultiplier: 7.0
 
 backtest:
   initialCapital: 1000
