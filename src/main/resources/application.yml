@@ -26,7 +26,7 @@ bybit:
 strategy:
   zigzag:
     mode: PERCENT
-    percentThreshold: 0.015
+    percentThreshold: 0.008
     atrPeriod: 14
     atrMultiplier: 2.0
   elliott:
@@ -43,12 +43,13 @@ strategy:
     maxAtrPercent: 0.05
   volume:
     period: 20
-    minMultiplier: 1.0
+    minMultiplier: 0.8
   features:
     enableWaveFilter: true
-    enableTrendFilter: true
+    enableTrendFilter: false
     enableVolumeFilter: true
     enableRegimeGate: true
+    enableSwingFallback: true
     entryModel: BASELINE
     exitModel: FIXED
   exit:
@@ -60,7 +61,24 @@ strategy:
     maxStopAtrMultiplier: 0.0
     breakEvenAtr: 0.0
   entry:
-    minRewardRisk: 1.1
+    minRewardRisk: 1.0
+  feeAware:
+    enabled: true
+    minEdgeMultiple: 2.0
+    bufferBps: 2
+  trendStrength:
+    enabled: true
+    model: ER
+    n: 20
+    threshold: 0.20
+  volExpansion:
+    enabled: true
+    lookback: 120
+    compressionQuantile: 0.40
+    requireRising: true
+    recentCompressionBars: 40
+    period: 20
+    stdDevMultiplier: 2.0
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002
@@ -74,30 +92,37 @@ strategy:
     blocked: []
     allowed:
       - UP_WEAK|MID|LOW
-      - FLAT|HIGH|NORMAL
+      - UP_WEAK|HIGH|LOW
+      - UP_WEAK|MID|NORMAL
       - UP_STRONG|MID|HIGH
+      - UP_STRONG|LOW|HIGH
+      - FLAT|HIGH|NORMAL
+      - FLAT|HIGH|HIGH
 
 risk:
-  riskPerTrade: 0.02
-  dailyMaxDd: 0.06
+  riskPerTrade: 0.05
+  dailyMaxDd: 0.20
   maxConsecutiveLosses: 3
   cooldownMinutes: 60
   minQty: 0.0
   maxQty: 1000000.0
+  maxLeverage: 15
   statePath: data/risk-state.json
   compounding:
     enabled: true
-    minRiskPerTrade: 0.01
-    maxRiskPerTrade: 0.05
-    scaleUp: 1.08
-    scaleDown: 0.90
+    minRiskPerTrade: 0.02
+    maxRiskPerTrade: 0.15
+    scaleUp: 1.12
+    scaleDown: 0.85
     minMultiplier: 0.5
-    maxMultiplier: 2.0
+    maxMultiplier: 4.0
 
 backtest:
   initialCapital: 1000
   feeRate: 0.0006
   slippageBps: 2
+  maxLookbackBars: 600
+  maxHtfLookbackBars: 400
   startMs:
   endMs:
   csvPath: data/sample_btcusdt_15m.csv

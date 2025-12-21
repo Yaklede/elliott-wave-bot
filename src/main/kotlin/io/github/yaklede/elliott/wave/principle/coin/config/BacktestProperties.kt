@@ -8,6 +8,8 @@ data class BacktestProperties(
     val initialCapital: BigDecimal = BigDecimal("1000"),
     val feeRate: BigDecimal = BigDecimal("0.0006"),
     val slippageBps: Int = 2,
+    val maxLookbackBars: Int = 600,
+    val maxHtfLookbackBars: Int? = null,
     val startMs: Long? = null,
     val endMs: Long? = null,
     val csvPath: String? = null,
