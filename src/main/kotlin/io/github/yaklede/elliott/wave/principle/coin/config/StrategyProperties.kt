@@ -140,6 +140,8 @@ data class FastBreakoutProperties(
     val lookbackBars: Int = 20,
     val atrStopMultiplier: BigDecimal = BigDecimal("1.2"),
     val atrTakeProfitMultiplier: BigDecimal = BigDecimal("2.5"),
+    val breakoutAtrBuffer: BigDecimal = BigDecimal("0.0"),
+    val minBodyAtr: BigDecimal = BigDecimal("0.0"),
 )
 
 data class PyramidingProperties(

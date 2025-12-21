@@ -25,6 +25,7 @@ enum class RejectReason {
     STOP_DISTANCE,
     LOW_REWARD_RISK,
     LOW_SCORE,
+    WEAK_BODY,
     NO_SETUP,
     REGIME_GATED,
     SHORT_GATE,

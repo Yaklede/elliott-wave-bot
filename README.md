@@ -105,6 +105,45 @@ Outputs are written to `build/reports/`:
 - `ablation-report.md`
 - `walk-forward-report.md`
 
+## New Filters (Fee/Trend/Volatility)
+These filters are enabled by default to reduce small-move trades and choppy regimes:
+- Fee-aware edge filter: requires expected move to exceed round-trip costs by a multiplier.
+- Trend strength filter: Efficiency Ratio (ER) on HTF by default.
+- Volatility expansion filter: Bollinger Bandwidth compression + expansion check.
+
+Tune in `application.yml`:
+```yaml
+strategy:
+  feeAware:
+    enabled: true
+    minEdgeMultiple: 2.0
+    bufferBps: 1
+  trendStrength:
+    enabled: true
+    model: ER
+    n: 20
+    threshold: 0.35
+  volExpansion:
+    enabled: true
+    lookback: 120
+    compressionQuantile: 0.2
+    requireRising: true
+    recentCompressionBars: 40
+```
+
+## Fast Breakout Tuning
+The FAST_BREAKOUT entry model supports extra gating to avoid weak breakouts:
+```yaml
+strategy:
+  features:
+    entryModel: FAST_BREAKOUT
+    enableTrendFilter: true   # long uses SMA50>SMA200, short uses SMA50<SMA200
+  fastBreakout:
+    lookbackBars: 20
+    breakoutAtrBuffer: 0.2    # require close to exceed prior range by ATR buffer
+    minBodyAtr: 0.3           # require breakout candle body >= ATR * 0.3
+```
+
 ## Regime Gate (optional)
 Use the report’s regime table to block consistently negative buckets. Configure:
 ```yaml

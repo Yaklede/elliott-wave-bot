@@ -45,9 +45,6 @@ class StrategyEngine(
             slopeLookbackBars = properties.regime.slopeLookbackBars,
         )
 
-        if (properties.features.enableTrendFilter && !passesTrendFilter(htfCandles)) {
-            return hold(RejectReason.TREND_FILTER, features)
-        }
         if (!passesTrendStrengthFilter(htfCandles)) {
             return hold(RejectReason.TREND_STRENGTH_FILTER, features)
         }
@@ -126,6 +123,9 @@ class StrategyEngine(
             .lastOrNull { it != null } ?: return hold(RejectReason.NO_SETUP, features)
 
         if (lastClose > maxHigh) {
+            if (properties.features.enableTrendFilter && !passesTrendFilter(htfCandles)) {
+                return hold(RejectReason.TREND_FILTER, features)
+            }
             if (properties.features.enableRegimeGate && features != null && regimeGate != null) {
                 val bucket = RegimeBucketer.bucket(
                     features = features,
@@ -136,6 +136,17 @@ class StrategyEngine(
                 if (regimeGate.isBlocked(bucket)) {
                     return hold(RejectReason.REGIME_GATED, features)
                 }
+            }
+            val buffer = atrValue.multiply(properties.fastBreakout.breakoutAtrBuffer)
+            val threshold = maxHigh.add(buffer)
+            if (lastClose <= threshold) {
+                return hold(RejectReason.NO_SETUP, features)
+            }
+            val body = lastClose.subtract(candles.last().open).abs()
+            if (properties.fastBreakout.minBodyAtr > BigDecimal.ZERO &&
+                body < atrValue.multiply(properties.fastBreakout.minBodyAtr)
+            ) {
+                return hold(RejectReason.WEAK_BODY, features)
             }
             val stop = lastClose.subtract(atrValue.multiply(properties.fastBreakout.atrStopMultiplier))
             val takeProfit = lastClose.add(atrValue.multiply(properties.fastBreakout.atrTakeProfitMultiplier))
@@ -167,8 +178,22 @@ class StrategyEngine(
         }
 
         if (lastClose < minLow) {
+            if (properties.features.enableTrendFilter && !passesDownTrendFilter(htfCandles)) {
+                return hold(RejectReason.TREND_FILTER, features)
+            }
             if (!passesShortGate(features, htfCandles)) {
                 return hold(RejectReason.SHORT_GATE, features)
+            }
+            val buffer = atrValue.multiply(properties.fastBreakout.breakoutAtrBuffer)
+            val threshold = minLow.subtract(buffer)
+            if (lastClose >= threshold) {
+                return hold(RejectReason.NO_SETUP, features)
+            }
+            val body = lastClose.subtract(candles.last().open).abs()
+            if (properties.fastBreakout.minBodyAtr > BigDecimal.ZERO &&
+                body < atrValue.multiply(properties.fastBreakout.minBodyAtr)
+            ) {
+                return hold(RejectReason.WEAK_BODY, features)
             }
             val stop = lastClose.add(atrValue.multiply(properties.fastBreakout.atrStopMultiplier))
             val takeProfit = lastClose.subtract(atrValue.multiply(properties.fastBreakout.atrTakeProfitMultiplier))
@@ -228,6 +253,10 @@ class StrategyEngine(
             if (!passesShortGate(features, htfCandles)) {
                 return hold(RejectReason.SHORT_GATE, features)
             }
+        }
+        if (properties.features.enableTrendFilter) {
+            val trendOk = if (isLong) passesTrendFilter(htfCandles) else passesDownTrendFilter(htfCandles)
+            if (!trendOk) return hold(RejectReason.TREND_FILTER, features)
         }
 
         val score = scorer.scoreWave2(setup, candles, htfCandles, properties.elliott, properties.volume, isLong)
@@ -312,6 +341,9 @@ class StrategyEngine(
             .lastOrNull { it != null }
 
         if (lastClose > lastHigh.price) {
+            if (properties.features.enableTrendFilter && !passesTrendFilter(htfCandles)) {
+                return hold(RejectReason.TREND_FILTER, features)
+            }
             if (properties.features.enableRegimeGate && features != null && regimeGate != null) {
                 val bucket = RegimeBucketer.bucket(
                     features = features,
@@ -361,6 +393,9 @@ class StrategyEngine(
         }
 
         if (lastClose < lastLow.price) {
+            if (properties.features.enableTrendFilter && !passesDownTrendFilter(htfCandles)) {
+                return hold(RejectReason.TREND_FILTER, features)
+            }
             if (!passesShortGate(features, htfCandles)) {
                 return hold(RejectReason.SHORT_GATE, features)
             }

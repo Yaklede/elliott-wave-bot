@@ -53,6 +53,12 @@ strategy:
     enableSwingFallback: true
     entryModel: RELAXED
     exitModel: FIXED
+  fastBreakout:
+    lookbackBars: 20
+    atrStopMultiplier: 1.2
+    atrTakeProfitMultiplier: 2.5
+    breakoutAtrBuffer: 0.0
+    minBodyAtr: 0.0
   exit:
     atrStopMultiplier: 1.5
     atrTakeProfitMultiplier: 3.0
