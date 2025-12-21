@@ -18,6 +18,7 @@ data class StrategyProperties(
     val volExpansion: VolExpansionProperties = VolExpansionProperties(),
     val pyramiding: PyramidingProperties = PyramidingProperties(),
     val shortGate: ShortGateProperties = ShortGateProperties(),
+    val fastBreakout: FastBreakoutProperties = FastBreakoutProperties(),
 )
 
 data class ZigZagProperties(
@@ -76,6 +77,7 @@ enum class EntryModel {
     CONFIDENCE_THRESHOLD,
     MOMENTUM_CONFIRM,
     RELAXED,
+    FAST_BREAKOUT,
 }
 
 enum class ExitModel {
@@ -132,6 +134,12 @@ data class ShortGateProperties(
     val requireDowntrend: Boolean = true,
     val allowed: List<String> = emptyList(),
     val blocked: List<String> = emptyList(),
+)
+
+data class FastBreakoutProperties(
+    val lookbackBars: Int = 20,
+    val atrStopMultiplier: BigDecimal = BigDecimal("1.2"),
+    val atrTakeProfitMultiplier: BigDecimal = BigDecimal("2.5"),
 )
 
 data class PyramidingProperties(

@@ -1,6 +1,7 @@
 package io.github.yaklede.elliott.wave.principle.coin.exchange.bybit
 
 import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.core.type.TypeReference
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.IntervalUtil
@@ -84,16 +85,22 @@ class BybitV5Client(
         limit: Int = 1000,
     ): List<Candle> {
         val intervalMs = IntervalUtil.intervalToMillis(interval)
+        if (intervalMs <= 0) return emptyList()
+        val alignedStart = start - (start % intervalMs)
+        val alignedEnd = end - (end % intervalMs)
+        if (alignedEnd < alignedStart) return emptyList()
+
         val result = mutableListOf<Candle>()
-        var cursor = start
-        while (cursor <= end) {
-            val batch = getKlines(category, symbol, interval, cursor, end, limit)
+        var cursorEnd = alignedEnd
+        while (cursorEnd >= alignedStart) {
+            val windowStart = (cursorEnd - intervalMs * (limit - 1)).coerceAtLeast(alignedStart)
+            val batch = getKlines(category, symbol, interval, windowStart, cursorEnd, limit)
             if (batch.isEmpty()) break
             result.addAll(batch)
-            val last = batch.last().timeOpenMs
-            val next = last + intervalMs
-            if (next <= cursor) break
-            cursor = next
+            val oldest = batch.first().timeOpenMs
+            val nextEnd = oldest - intervalMs
+            if (nextEnd >= cursorEnd) break
+            cursorEnd = nextEnd
         }
         return result.distinctBy { it.timeOpenMs }.sortedBy { it.timeOpenMs }
     }
@@ -147,10 +154,12 @@ class BybitV5Client(
         } else {
             request
         }
-        return finalized.exchangeToMono { response ->
+        val body = finalized.exchangeToMono { response ->
             logRateLimitHeaders(response.headers().asHttpHeaders())
-            response.bodyToMono(object : ParameterizedTypeReference<BybitResponse<T>>() {})
+            response.bodyToMono(String::class.java)
         }.awaitSingle()
+        val typeRef = object : TypeReference<BybitResponse<T>>() {}
+        return objectMapper.readValue(body, typeRef)
     }
 
     private suspend inline fun <reified T> post(

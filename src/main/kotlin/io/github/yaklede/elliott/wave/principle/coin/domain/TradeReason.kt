@@ -4,6 +4,7 @@ enum class EntryReason {
     W2_COMPLETE_BREAK_W1_END,
     SWING_BREAKOUT,
     SWING_BREAKDOWN,
+    FAST_BREAKOUT,
 }
 
 enum class ExitReason {

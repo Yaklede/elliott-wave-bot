@@ -61,6 +61,10 @@ class StrategyEngine(
             return hold(RejectReason.VOL_EXPANSION_FILTER, features)
         }
 
+        if (properties.features.entryModel == EntryModel.FAST_BREAKOUT) {
+            return evaluateFastBreakout(candles, htfCandles, features, regimeGate)
+        }
+
         return if (properties.features.enableWaveFilter) {
             val waveSignal = evaluateWave(candles, htfCandles, features, regimeGate)
             if (properties.features.enableSwingFallback &&
@@ -104,6 +108,98 @@ class StrategyEngine(
         }
         return candidates.maxByOrNull { it.confidence ?: it.score ?: BigDecimal.ZERO }
             ?: hold(RejectReason.NO_SETUP, features)
+    }
+
+    private fun evaluateFastBreakout(
+        candles: List<Candle>,
+        htfCandles: List<Candle>,
+        features: RegimeFeatures?,
+        regimeGate: RegimeGate?,
+    ): TradeSignal {
+        val lookback = properties.fastBreakout.lookbackBars
+        if (candles.size <= lookback) return hold(RejectReason.NO_SETUP, features)
+        val window = candles.subList(candles.size - lookback - 1, candles.size - 1)
+        val maxHigh = window.maxOf { it.high }
+        val minLow = window.minOf { it.low }
+        val lastClose = candles.last().close
+        val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
+            .lastOrNull { it != null } ?: return hold(RejectReason.NO_SETUP, features)
+
+        if (lastClose > maxHigh) {
+            if (properties.features.enableRegimeGate && features != null && regimeGate != null) {
+                val bucket = RegimeBucketer.bucket(
+                    features = features,
+                    thresholds = regimeGate.thresholds,
+                    weakSlope = properties.regime.weakSlope,
+                    strongSlope = properties.regime.strongSlope,
+                )
+                if (regimeGate.isBlocked(bucket)) {
+                    return hold(RejectReason.REGIME_GATED, features)
+                }
+            }
+            val stop = lastClose.subtract(atrValue.multiply(properties.fastBreakout.atrStopMultiplier))
+            val takeProfit = lastClose.add(atrValue.multiply(properties.fastBreakout.atrTakeProfitMultiplier))
+            val exitPlan = exitPlanBuilder.build(
+                entryPrice = lastClose,
+                stopCandidate = stop,
+                takeProfitCandidate = takeProfit,
+                atrValue = atrValue,
+                isLong = true,
+            )
+            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+                return hold(RejectReason.FEE_EDGE_FILTER, features)
+            }
+            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+                return hold(RejectReason.STOP_DISTANCE, features)
+            }
+            if (isRewardRiskTooLow(lastClose, exitPlan)) {
+                return hold(RejectReason.LOW_REWARD_RISK, features)
+            }
+            return TradeSignal(
+                type = SignalType.ENTER_LONG,
+                entryPrice = lastClose,
+                exitPlan = exitPlan,
+                score = null,
+                confidence = null,
+                entryReason = EntryReason.FAST_BREAKOUT,
+                features = features,
+            )
+        }
+
+        if (lastClose < minLow) {
+            if (!passesShortGate(features, htfCandles)) {
+                return hold(RejectReason.SHORT_GATE, features)
+            }
+            val stop = lastClose.add(atrValue.multiply(properties.fastBreakout.atrStopMultiplier))
+            val takeProfit = lastClose.subtract(atrValue.multiply(properties.fastBreakout.atrTakeProfitMultiplier))
+            val exitPlan = exitPlanBuilder.build(
+                entryPrice = lastClose,
+                stopCandidate = stop,
+                takeProfitCandidate = takeProfit,
+                atrValue = atrValue,
+                isLong = false,
+            )
+            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+                return hold(RejectReason.FEE_EDGE_FILTER, features)
+            }
+            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+                return hold(RejectReason.STOP_DISTANCE, features)
+            }
+            if (isRewardRiskTooLow(lastClose, exitPlan)) {
+                return hold(RejectReason.LOW_REWARD_RISK, features)
+            }
+            return TradeSignal(
+                type = SignalType.ENTER_SHORT,
+                entryPrice = lastClose,
+                exitPlan = exitPlan,
+                score = null,
+                confidence = null,
+                entryReason = EntryReason.FAST_BREAKOUT,
+                features = features,
+            )
+        }
+
+        return hold(RejectReason.NO_SETUP, features)
     }
 
     private fun buildWaveSignal(
@@ -155,6 +251,7 @@ class StrategyEngine(
                 score >= threshold && lastClose < prev.low
             }
             EntryModel.RELAXED -> true
+            EntryModel.FAST_BREAKOUT -> true
         }
         if (!entryOk) return hold(RejectReason.LOW_SCORE, features, score, confidence)
 

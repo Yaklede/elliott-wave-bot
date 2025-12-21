@@ -4,6 +4,7 @@ import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BotMode
 import io.github.yaklede.elliott.wave.principle.coin.config.BotProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.DataFetchProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.ResearchProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
@@ -38,6 +39,7 @@ class ExecutionEngine(
     private val bybitProperties: BybitProperties,
     private val backtestProperties: BacktestProperties,
     private val researchProperties: ResearchProperties,
+    private val dataFetchProperties: DataFetchProperties,
     private val strategyProperties: StrategyProperties,
     private val marketDataService: MarketDataService,
     private val strategyEngine: StrategyEngine,
@@ -60,6 +62,10 @@ class ExecutionEngine(
 
     @EventListener(ApplicationReadyEvent::class)
     fun onReady() {
+        if (dataFetchProperties.enabled) {
+            log.info("Data fetch enabled; execution engine is idle")
+            return
+        }
         if (researchProperties.enabled) {
             log.info("Research mode enabled; execution engine is idle")
             return
