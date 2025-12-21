@@ -26,7 +26,7 @@ bybit:
 strategy:
   zigzag:
     mode: PERCENT
-    percentThreshold: 0.006
+    percentThreshold: 0.008
     atrPeriod: 14
     atrMultiplier: 2.0
   elliott:
@@ -43,7 +43,7 @@ strategy:
     maxAtrPercent: 0.05
   volume:
     period: 20
-    minMultiplier: 0.6
+    minMultiplier: 0.8
   features:
     enableWaveFilter: true
     enableShortWave: false
@@ -109,7 +109,7 @@ strategy:
       - DOWN_STRONG|HIGH|HIGH
 
 risk:
-  riskPerTrade: 0.05
+  riskPerTrade: 0.07
   dailyMaxDd: 0.20
   maxConsecutiveLosses: 3
   cooldownMinutes: 60
@@ -120,11 +120,11 @@ risk:
   compounding:
     enabled: true
     minRiskPerTrade: 0.02
-    maxRiskPerTrade: 0.15
-    scaleUp: 1.12
+    maxRiskPerTrade: 0.20
+    scaleUp: 1.20
     scaleDown: 0.85
     minMultiplier: 0.5
-    maxMultiplier: 4.0
+    maxMultiplier: 5.0
 
 backtest:
   initialCapital: 1000
