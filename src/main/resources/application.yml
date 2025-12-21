@@ -85,6 +85,8 @@ strategy:
     maxAdds: 1
     addOnRiskFraction: 0.5
     minBarsBetweenAdds: 4
+    triggerModel: ATR_MOVE
+    minMoveAtr: 0.8
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002

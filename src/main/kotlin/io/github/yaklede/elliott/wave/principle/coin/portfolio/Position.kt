@@ -30,6 +30,7 @@ data class Position(
     val trailingActive: Boolean = false,
     val addsCount: Int = 0,
     val lastAddTimeMs: Long? = null,
+    val lastAddPrice: BigDecimal? = null,
 ) {
     companion object {
         fun flat(): Position = Position(PositionSide.FLAT, BigDecimal.ZERO, BigDecimal.ZERO)

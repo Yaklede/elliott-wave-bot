@@ -14,6 +14,7 @@ import io.github.yaklede.elliott.wave.principle.coin.portfolio.PositionSide
 import io.github.yaklede.elliott.wave.principle.coin.risk.RiskManager
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.SignalType
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.StrategyEngine
+import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.ATRCalculator
 import io.github.yaklede.elliott.wave.principle.coin.domain.ExitReason
 import io.github.yaklede.elliott.wave.principle.coin.domain.RegimeGate
 import java.math.BigDecimal
@@ -28,6 +29,7 @@ class BacktestSimulator(
     private val orderPriceService: OrderPriceService,
     private val sanityChecks: BacktestSanityChecks,
 ) {
+    private val atrCalculator = ATRCalculator()
     fun run(
         candles: List<Candle>,
         strategyEngine: StrategyEngine,
@@ -87,8 +89,8 @@ class BacktestSimulator(
                         pendingSignal = null
                         continue
                     }
-                    val entry = candle.open
                     if (position.side == PositionSide.FLAT) {
+                        val entry = candle.open
                         val takeProfit = plan.takeProfitPrice ?: entry
                         val priceLevels = orderPriceService.adjustPrices(entry, plan.stopPrice, takeProfit, null, isLongSignal)
                         if (priceLevels != null) {
@@ -129,24 +131,6 @@ class BacktestSimulator(
                                         confidenceScore = pendingSignal!!.confidence,
                                         features = pendingSignal!!.features,
                                     )
-                                }
-                            }
-                        }
-                    } else if (canAdd(position, candle.timeOpenMs, intervalMs, isLongSignal, isShortSignal)) {
-                        val stop = position.stopPrice
-                        val takeProfit = position.takeProfitPrice
-                        if (stop != null && takeProfit != null) {
-                            val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, null, isLongSignal)
-                            if (priceLevels != null) {
-                                val qty = riskManager.computeOrderQty(
-                                    equity = portfolioService.equity,
-                                    entryPrice = priceLevels.entry,
-                                    stopPrice = priceLevels.stop,
-                                    riskFraction = strategyProperties.pyramiding.addOnRiskFraction,
-                                )
-                                if (qty > BigDecimal.ZERO) {
-                                    val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = isLongSignal)
-                                    portfolioService.addToPosition(qty, fillPrice, properties.feeRate, candle.timeOpenMs)
                                 }
                             }
                         }
@@ -225,14 +209,16 @@ class BacktestSimulator(
                 }
             }
 
+            val windowStart = if (i + 1 > maxLookbackBars) (i + 1 - maxLookbackBars) else 0
+            val window = candles.subList(windowStart, i + 1)
+            maybeAddOn(window, candle, intervalMs, riskManager, portfolioService)
+
             val equity = portfolioService.equity.add(portfolioService.unrealizedPnl())
             if (equity > equityPeak) equityPeak = equity
             val drawdown = equityPeak.subtract(equity)
                 .divide(equityPeak, 6, RoundingMode.HALF_UP)
             if (drawdown > maxDrawdown) maxDrawdown = drawdown
 
-            val windowStart = if (i + 1 > maxLookbackBars) (i + 1 - maxLookbackBars) else 0
-            val window = candles.subList(windowStart, i + 1)
             val signal = strategyEngine.evaluate(window, htfWindow, regimeGate)
             if (recordDecisions) {
                 decisions.add(
@@ -287,21 +273,50 @@ class BacktestSimulator(
         )
     }
 
-    private fun canAdd(
-        position: io.github.yaklede.elliott.wave.principle.coin.portfolio.Position,
-        timeMs: Long,
+    private fun maybeAddOn(
+        window: List<Candle>,
+        candle: Candle,
         intervalMs: Long,
-        isLongSignal: Boolean,
-        isShortSignal: Boolean,
-    ): Boolean {
+        riskManager: RiskManager,
+        portfolioService: PortfolioService,
+    ) {
         val pyramiding = strategyProperties.pyramiding
-        if (!pyramiding.enabled) return false
-        if (position.addsCount >= pyramiding.maxAdds) return false
-        if (position.side == PositionSide.LONG && !isLongSignal) return false
-        if (position.side == PositionSide.SHORT && !isShortSignal) return false
-        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs ?: return true
-        val bars = (timeMs - lastAdd) / intervalMs
-        return bars >= pyramiding.minBarsBetweenAdds
+        if (!pyramiding.enabled) return
+        if (pyramiding.triggerModel != io.github.yaklede.elliott.wave.principle.coin.config.PyramidingTrigger.ATR_MOVE) return
+        val position = portfolioService.position
+        if (position.side == PositionSide.FLAT) return
+        if (position.addsCount >= pyramiding.maxAdds) return
+        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs
+        if (lastAdd != null) {
+            val bars = (candle.timeOpenMs - lastAdd) / intervalMs
+            if (bars < pyramiding.minBarsBetweenAdds) return
+        }
+
+        val atrPeriod = strategyProperties.volatility.atrPeriod
+        val atr = atrCalculator.calculate(window, atrPeriod).lastOrNull { it != null } ?: return
+        val move = atr.multiply(pyramiding.minMoveAtr)
+        val reference = position.lastAddPrice ?: position.avgPrice
+        val close = candle.close
+        val favorable = when (position.side) {
+            PositionSide.LONG -> close >= reference.add(move)
+            PositionSide.SHORT -> close <= reference.subtract(move)
+            else -> false
+        }
+        if (!favorable) return
+
+        val stop = position.stopPrice ?: return
+        val takeProfit = position.takeProfitPrice ?: return
+        val isLong = position.side == PositionSide.LONG
+        val priceLevels = orderPriceService.adjustPrices(close, stop, takeProfit, null, isLong) ?: return
+        val qty = riskManager.computeOrderQty(
+            equity = portfolioService.equity,
+            entryPrice = priceLevels.entry,
+            stopPrice = priceLevels.stop,
+            riskFraction = pyramiding.addOnRiskFraction,
+        )
+        if (qty <= BigDecimal.ZERO) return
+        val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = isLong)
+        portfolioService.addToPosition(qty, fillPrice, properties.feeRate, candle.timeOpenMs)
     }
 
     private fun applySlippage(price: BigDecimal, bps: Int, isBuy: Boolean): BigDecimal {

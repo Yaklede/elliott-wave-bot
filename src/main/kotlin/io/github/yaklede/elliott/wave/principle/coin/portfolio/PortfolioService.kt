@@ -57,6 +57,7 @@ class PortfolioService(
             features = features,
             addsCount = 0,
             lastAddTimeMs = timeMs,
+            lastAddPrice = price,
         )
         lastMarkPrice = price
     }
@@ -98,6 +99,7 @@ class PortfolioService(
             features = features,
             addsCount = 0,
             lastAddTimeMs = timeMs,
+            lastAddPrice = price,
         )
         lastMarkPrice = price
     }
@@ -126,6 +128,7 @@ class PortfolioService(
             entryFee = updatedEntryFee,
             addsCount = mutablePosition.addsCount + 1,
             lastAddTimeMs = timeMs,
+            lastAddPrice = price,
         )
         lastMarkPrice = price
         return true

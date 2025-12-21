@@ -130,7 +130,13 @@ data class PyramidingProperties(
     val maxAdds: Int = 1,
     val addOnRiskFraction: BigDecimal = BigDecimal("0.5"),
     val minBarsBetweenAdds: Int = 4,
+    val triggerModel: PyramidingTrigger = PyramidingTrigger.ATR_MOVE,
+    val minMoveAtr: BigDecimal = BigDecimal("0.8"),
 )
+
+enum class PyramidingTrigger {
+    ATR_MOVE,
+}
 
 data class RegimeProperties(
     val slopeLookbackBars: Int = 20,

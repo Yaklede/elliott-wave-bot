@@ -16,6 +16,7 @@ import io.github.yaklede.elliott.wave.principle.coin.risk.RiskManager
 import io.github.yaklede.elliott.wave.principle.coin.risk.RiskStateStore
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.SignalType
 import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.StrategyEngine
+import io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.ATRCalculator
 import io.github.yaklede.elliott.wave.principle.coin.domain.ExitReason
 import java.math.BigDecimal
 import java.time.Instant
@@ -54,6 +55,7 @@ class ExecutionEngine(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val atrCalculator = ATRCalculator()
     private var lastCandleTime: Long? = null
 
     @EventListener(ApplicationReadyEvent::class)
@@ -189,42 +191,6 @@ class ExecutionEngine(
                 }
             }
         }
-        if (position.side != PositionSide.FLAT && (signal.type == SignalType.ENTER_LONG || signal.type == SignalType.ENTER_SHORT)) {
-            val isLong = signal.type == SignalType.ENTER_LONG
-            if (riskManager.canEnter(now) && canAdd(position, candleTimeMs, intervalMs, isLong)) {
-                val stop = position.stopPrice ?: return
-                val takeProfit = position.takeProfitPrice ?: return
-                val entry = signal.entryPrice ?: closePrice
-                val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, isLong) ?: return
-                val qty = orderSizingService.computeQty(
-                    equity = portfolioService.equity,
-                    entryPrice = priceLevels.entry,
-                    stopPrice = priceLevels.stop,
-                    riskFraction = strategyProperties.pyramiding.addOnRiskFraction,
-                )
-                if (qty > BigDecimal.ZERO) {
-                    if (live) {
-                        if (!isLong) {
-                            log.warn("Live short scale-ins are not supported for spot market orders; skipping add")
-                            return
-                        }
-                        liveModeGuard.ensureLiveAllowed()
-                        val orderLinkId = UUID.randomUUID().toString()
-                        bybitV5Client.placeOrderSpotMarket(
-                            symbol = bybitProperties.symbol,
-                            side = "Buy",
-                            qty = qty,
-                            orderLinkId = orderLinkId,
-                        )
-                    }
-                    val fillPrice = applySlippage(priceLevels.entry, backtestProperties.slippageBps, isBuy = isLong)
-                    portfolioService.addToPosition(qty, fillPrice, backtestProperties.feeRate, candleTimeMs)
-                    portfolioStore.save(portfolioService.snapshot())
-                    riskStateStore.save(riskManager.snapshot())
-                }
-            }
-        }
-
         val openPosition = portfolioService.position
         if (openPosition.side == PositionSide.LONG || openPosition.side == PositionSide.SHORT) {
             val stop = openPosition.stopPrice
@@ -294,6 +260,8 @@ class ExecutionEngine(
             }
         }
 
+        maybeAddOn(candles, closePrice, candleTimeMs, intervalMs, live)
+
         botStateStore.update(
             mode = botProperties.mode,
             symbol = bybitProperties.symbol,
@@ -333,19 +301,66 @@ class ExecutionEngine(
         }
     }
 
-    private fun canAdd(
-        position: io.github.yaklede.elliott.wave.principle.coin.portfolio.Position,
+    private suspend fun maybeAddOn(
+        candles: List<io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle>,
+        closePrice: BigDecimal,
         timeMs: Long,
         intervalMs: Long,
-        isLongSignal: Boolean,
-    ): Boolean {
+        live: Boolean,
+    ) {
         val pyramiding = strategyProperties.pyramiding
-        if (!pyramiding.enabled) return false
-        if (position.addsCount >= pyramiding.maxAdds) return false
-        if (position.side == PositionSide.LONG && !isLongSignal) return false
-        if (position.side == PositionSide.SHORT && isLongSignal) return false
-        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs ?: return true
-        val bars = (timeMs - lastAdd) / intervalMs
-        return bars >= pyramiding.minBarsBetweenAdds
+        if (!pyramiding.enabled) return
+        if (pyramiding.triggerModel != io.github.yaklede.elliott.wave.principle.coin.config.PyramidingTrigger.ATR_MOVE) return
+        val position = portfolioService.position
+        if (position.side == PositionSide.FLAT) return
+        if (!riskManager.canEnter(Instant.ofEpochMilli(timeMs))) return
+        if (position.addsCount >= pyramiding.maxAdds) return
+        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs
+        if (lastAdd != null) {
+            val bars = (timeMs - lastAdd) / intervalMs
+            if (bars < pyramiding.minBarsBetweenAdds) return
+        }
+
+        val atrPeriod = strategyProperties.volatility.atrPeriod
+        val atr = atrCalculator.calculate(candles, atrPeriod).lastOrNull { it != null } ?: return
+        val move = atr.multiply(pyramiding.minMoveAtr)
+        val reference = position.lastAddPrice ?: position.avgPrice
+        val favorable = when (position.side) {
+            PositionSide.LONG -> closePrice >= reference.add(move)
+            PositionSide.SHORT -> closePrice <= reference.subtract(move)
+            else -> false
+        }
+        if (!favorable) return
+
+        val stop = position.stopPrice ?: return
+        val takeProfit = position.takeProfitPrice ?: return
+        val isLong = position.side == PositionSide.LONG
+        val priceLevels = orderPriceService.adjustPrices(closePrice, stop, takeProfit, isLong) ?: return
+        val qty = orderSizingService.computeQty(
+            equity = portfolioService.equity,
+            entryPrice = priceLevels.entry,
+            stopPrice = priceLevels.stop,
+            riskFraction = pyramiding.addOnRiskFraction,
+        )
+        if (qty <= BigDecimal.ZERO) return
+
+        if (live) {
+            if (!isLong) {
+                log.warn("Live short scale-ins are not supported for spot market orders; skipping add")
+                return
+            }
+            liveModeGuard.ensureLiveAllowed()
+            val orderLinkId = UUID.randomUUID().toString()
+            bybitV5Client.placeOrderSpotMarket(
+                symbol = bybitProperties.symbol,
+                side = "Buy",
+                qty = qty,
+                orderLinkId = orderLinkId,
+            )
+        }
+        val fillPrice = applySlippage(priceLevels.entry, backtestProperties.slippageBps, isBuy = isLong)
+        portfolioService.addToPosition(qty, fillPrice, backtestProperties.feeRate, timeMs)
+        portfolioStore.save(portfolioService.snapshot())
+        riskStateStore.save(riskManager.snapshot())
     }
 }
