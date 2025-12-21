@@ -51,7 +51,7 @@ strategy:
     enableVolumeFilter: true
     enableRegimeGate: true
     enableSwingFallback: true
-    entryModel: BASELINE
+    entryModel: RELAXED
     exitModel: FIXED
   exit:
     atrStopMultiplier: 1.5

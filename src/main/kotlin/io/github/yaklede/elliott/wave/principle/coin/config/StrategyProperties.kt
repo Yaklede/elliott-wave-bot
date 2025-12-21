@@ -75,6 +75,7 @@ enum class EntryModel {
     BASELINE,
     CONFIDENCE_THRESHOLD,
     MOMENTUM_CONFIRM,
+    RELAXED,
 }
 
 enum class ExitModel {

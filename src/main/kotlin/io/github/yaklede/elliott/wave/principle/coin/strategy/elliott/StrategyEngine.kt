@@ -154,6 +154,7 @@ class StrategyEngine(
             } else {
                 score >= threshold && lastClose < prev.low
             }
+            EntryModel.RELAXED -> true
         }
         if (!entryOk) return hold(RejectReason.LOW_SCORE, features, score, confidence)
 
