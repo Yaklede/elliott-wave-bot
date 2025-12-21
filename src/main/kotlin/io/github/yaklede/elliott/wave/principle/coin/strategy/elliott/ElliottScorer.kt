@@ -13,9 +13,10 @@ class ElliottScorer {
         htfCandles: List<Candle>,
         elliott: ElliottProperties,
         volume: VolumeProperties,
+        isLong: Boolean,
     ): BigDecimal {
-        val fibScore = fibScore(setup, elliott)
-        val trendScore = trendScore(htfCandles)
+        val fibScore = fibScore(setup, elliott, isLong)
+        val trendScore = trendScore(htfCandles, isLong)
         val volumeScore = volumeScore(setup, candles, volume)
         return fibScore.add(trendScore).add(volumeScore)
             .divide(BigDecimal("3.0"), 4, RoundingMode.HALF_UP)
@@ -28,19 +29,24 @@ class ElliottScorer {
         elliott: ElliottProperties,
         volume: VolumeProperties,
         atrValue: BigDecimal?,
+        isLong: Boolean,
     ): BigDecimal {
-        val fibScore = fibScore(setup, elliott)
-        val trendScore = trendScore(htfCandles)
+        val fibScore = fibScore(setup, elliott, isLong)
+        val trendScore = trendScore(htfCandles, isLong)
         val volumeScore = volumeScore(setup, candles, volume)
         val swingScore = swingStrengthScore(setup, atrValue, elliott.swingAtrMultiplier)
         return fibScore.add(trendScore).add(volumeScore).add(swingScore)
             .divide(BigDecimal("4.0"), 4, RoundingMode.HALF_UP)
     }
 
-    private fun fibScore(setup: Wave2Setup, properties: ElliottProperties): BigDecimal {
-        val wave1Size = setup.wave1End.price.subtract(setup.wave1Start.price)
+    private fun fibScore(setup: Wave2Setup, properties: ElliottProperties, isLong: Boolean): BigDecimal {
+        val wave1Size = setup.wave1End.price.subtract(setup.wave1Start.price).abs()
         if (wave1Size == BigDecimal.ZERO) return BigDecimal.ZERO
-        val retrace = setup.wave1End.price.subtract(setup.wave2End.price)
+        val retrace = if (isLong) {
+            setup.wave1End.price.subtract(setup.wave2End.price)
+        } else {
+            setup.wave2End.price.subtract(setup.wave1End.price)
+        }
             .divide(wave1Size, 4, RoundingMode.HALF_UP)
         val min = properties.fib.wave2PreferredMin
         val max = properties.fib.wave2PreferredMax
@@ -53,11 +59,15 @@ class ElliottScorer {
         return score.coerceIn(BigDecimal.ZERO, BigDecimal.ONE)
     }
 
-    private fun trendScore(htfCandles: List<Candle>): BigDecimal {
+    private fun trendScore(htfCandles: List<Candle>, isLong: Boolean): BigDecimal {
         if (htfCandles.size < 200) return BigDecimal("0.5")
         val sma50 = sma(htfCandles.takeLast(50))
         val sma200 = sma(htfCandles.takeLast(200))
-        return if (sma50 > sma200) BigDecimal.ONE else BigDecimal.ZERO
+        return if (isLong) {
+            if (sma50 > sma200) BigDecimal.ONE else BigDecimal.ZERO
+        } else {
+            if (sma50 < sma200) BigDecimal.ONE else BigDecimal.ZERO
+        }
     }
 
     private fun volumeScore(setup: Wave2Setup, candles: List<Candle>, volume: VolumeProperties): BigDecimal {

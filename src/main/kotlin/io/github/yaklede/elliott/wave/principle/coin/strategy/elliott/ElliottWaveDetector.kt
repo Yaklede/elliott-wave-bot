@@ -18,6 +18,21 @@ class ElliottWaveDetector {
         return null
     }
 
+    fun findWave2SetupDown(swings: List<SwingPoint>): Wave2Setup? {
+        if (swings.size < 3) return null
+        for (i in swings.size - 3 downTo 0) {
+            val s0 = swings[i]
+            val s1 = swings[i + 1]
+            val s2 = swings[i + 2]
+            if (s0.type == SwingType.HIGH && s1.type == SwingType.LOW && s2.type == SwingType.HIGH) {
+                if (s2.price <= s0.price) {
+                    return Wave2Setup(s0, s1, s2)
+                }
+            }
+        }
+        return null
+    }
+
     fun findLatestImpulse(swings: List<SwingPoint>, enforceNoOverlap: Boolean): WaveImpulse? {
         if (swings.size < 6) return null
         val lastSix = swings.takeLast(6)

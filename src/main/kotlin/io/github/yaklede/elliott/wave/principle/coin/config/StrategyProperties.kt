@@ -13,6 +13,9 @@ data class StrategyProperties(
     val exit: ExitProperties = ExitProperties(),
     val regime: RegimeProperties = RegimeProperties(),
     val entry: EntryProperties = EntryProperties(),
+    val feeAware: FeeAwareProperties = FeeAwareProperties(),
+    val trendStrength: TrendStrengthProperties = TrendStrengthProperties(),
+    val volExpansion: VolExpansionProperties = VolExpansionProperties(),
 )
 
 data class ZigZagProperties(
@@ -57,9 +60,11 @@ data class VolumeProperties(
 
 data class StrategyFeatures(
     val enableWaveFilter: Boolean = true,
+    val enableShortWave: Boolean = false,
     val enableTrendFilter: Boolean = true,
     val enableVolumeFilter: Boolean = true,
     val enableRegimeGate: Boolean = false,
+    val enableSwingFallback: Boolean = false,
     val entryModel: EntryModel = EntryModel.BASELINE,
     val exitModel: ExitModel = ExitModel.FIXED,
 )
@@ -89,6 +94,34 @@ data class ExitProperties(
 
 data class EntryProperties(
     val minRewardRisk: BigDecimal = BigDecimal("1.2"),
+)
+
+data class FeeAwareProperties(
+    val enabled: Boolean = true,
+    val minEdgeMultiple: BigDecimal = BigDecimal("2.0"),
+    val bufferBps: BigDecimal = BigDecimal("1.0"),
+)
+
+data class TrendStrengthProperties(
+    val enabled: Boolean = true,
+    val model: TrendStrengthModel = TrendStrengthModel.ER,
+    val n: Int = 20,
+    val threshold: BigDecimal = BigDecimal("0.35"),
+)
+
+enum class TrendStrengthModel {
+    ER,
+    ADX,
+}
+
+data class VolExpansionProperties(
+    val enabled: Boolean = true,
+    val lookback: Int = 120,
+    val compressionQuantile: BigDecimal = BigDecimal("0.2"),
+    val requireRising: Boolean = true,
+    val recentCompressionBars: Int = 40,
+    val period: Int = 20,
+    val stdDevMultiplier: BigDecimal = BigDecimal("2.0"),
 )
 
 data class RegimeProperties(

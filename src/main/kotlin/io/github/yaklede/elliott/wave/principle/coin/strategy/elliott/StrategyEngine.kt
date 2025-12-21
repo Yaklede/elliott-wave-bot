@@ -93,61 +93,95 @@ class StrategyEngine(
         features: RegimeFeatures?,
     ): TradeSignal {
         val swings = zigZagExtractor.extract(candles)
-        val wave2 = detector.findWave2Setup(swings) ?: return hold(RejectReason.NO_SETUP, features)
+        val wave2Long = detector.findWave2Setup(swings)
+        val wave2Short = if (properties.features.enableShortWave) {
+            detector.findWave2SetupDown(swings)
+        } else {
+            null
+        }
+        if (wave2Long == null && wave2Short == null) return hold(RejectReason.NO_SETUP, features)
 
         val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
             .lastOrNull { it != null }
-        val score = scorer.scoreWave2(wave2, candles, htfCandles, properties.elliott, properties.volume)
+        val lastClose = candles.last().close
+        val longSignal = wave2Long?.let { buildWaveSignal(it, true, candles, htfCandles, features, atrValue, lastClose) }
+        val shortSignal = wave2Short?.let { buildWaveSignal(it, false, candles, htfCandles, features, atrValue, lastClose) }
+
+        val candidates = listOfNotNull(longSignal, shortSignal).filter { it.type != SignalType.HOLD }
+        if (candidates.isEmpty()) {
+            val fallback = longSignal ?: shortSignal
+            return hold(fallback?.rejectReason ?: RejectReason.NO_SETUP, features, fallback?.score, fallback?.confidence)
+        }
+        return candidates.maxByOrNull { it.confidence ?: it.score ?: BigDecimal.ZERO }
+            ?: hold(RejectReason.NO_SETUP, features)
+    }
+
+    private fun buildWaveSignal(
+        setup: Wave2Setup,
+        isLong: Boolean,
+        candles: List<Candle>,
+        htfCandles: List<Candle>,
+        features: RegimeFeatures?,
+        atrValue: BigDecimal?,
+        lastClose: BigDecimal,
+    ): TradeSignal {
+        val score = scorer.scoreWave2(setup, candles, htfCandles, properties.elliott, properties.volume, isLong)
         val confidence = scorer.confidenceScore(
-            setup = wave2,
+            setup = setup,
             candles = candles,
             htfCandles = htfCandles,
             elliott = properties.elliott,
             volume = properties.volume,
             atrValue = atrValue,
+            isLong = isLong,
         )
-
         val threshold = properties.elliott.minScoreToTrade
-        val lastClose = candles.last().close
+        val prev = candles[candles.size - 2]
         val entryOk = when (properties.features.entryModel) {
             EntryModel.BASELINE -> score >= threshold
             EntryModel.CONFIDENCE_THRESHOLD -> confidence >= threshold
-            EntryModel.MOMENTUM_CONFIRM -> score >= threshold && lastClose > candles[candles.size - 2].high
+            EntryModel.MOMENTUM_CONFIRM -> if (isLong) {
+                score >= threshold && lastClose > prev.high
+            } else {
+                score >= threshold && lastClose < prev.low
+            }
         }
         if (!entryOk) return hold(RejectReason.LOW_SCORE, features, score, confidence)
 
-        if (lastClose > wave2.wave1End.price) {
-            val wave1Size = wave2.wave1End.price.subtract(wave2.wave1Start.price)
-            val fixedTakeProfit = wave2.wave1End.price.add(
-                wave1Size.multiply(properties.elliott.fib.takeProfitExtension)
-            )
-            val exitPlan = exitPlanBuilder.build(
-                entryPrice = lastClose,
-                stopCandidate = wave2.wave1Start.price,
-                takeProfitCandidate = fixedTakeProfit,
-                atrValue = atrValue,
-                isLong = true,
-            )
-            if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
-                return hold(RejectReason.FEE_EDGE_FILTER, features, score, confidence)
-            }
-            if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
-                return hold(RejectReason.STOP_DISTANCE, features, score, confidence)
-            }
-            if (isRewardRiskTooLow(lastClose, exitPlan)) {
-                return hold(RejectReason.LOW_REWARD_RISK, features, score, confidence)
-            }
-            return TradeSignal(
-                type = SignalType.ENTER_LONG,
-                entryPrice = lastClose,
-                exitPlan = exitPlan,
-                score = score,
-                confidence = confidence,
-                entryReason = EntryReason.W2_COMPLETE_BREAK_W1_END,
-                features = features,
-            )
+        val triggerOk = if (isLong) lastClose > setup.wave1End.price else lastClose < setup.wave1End.price
+        if (!triggerOk) return hold(RejectReason.NO_SETUP, features, score, confidence)
+
+        val wave1Size = setup.wave1End.price.subtract(setup.wave1Start.price).abs()
+        val fixedTakeProfit = if (isLong) {
+            setup.wave1End.price.add(wave1Size.multiply(properties.elliott.fib.takeProfitExtension))
+        } else {
+            setup.wave1End.price.subtract(wave1Size.multiply(properties.elliott.fib.takeProfitExtension))
         }
-        return hold(RejectReason.NO_SETUP, features, score, confidence)
+        val exitPlan = exitPlanBuilder.build(
+            entryPrice = lastClose,
+            stopCandidate = setup.wave1Start.price,
+            takeProfitCandidate = fixedTakeProfit,
+            atrValue = atrValue,
+            isLong = isLong,
+        )
+        if (!feeAwareGate.passes(lastClose, exitPlan.takeProfitPrice)) {
+            return hold(RejectReason.FEE_EDGE_FILTER, features, score, confidence)
+        }
+        if (isStopTooWide(lastClose, exitPlan.stopPrice, atrValue)) {
+            return hold(RejectReason.STOP_DISTANCE, features, score, confidence)
+        }
+        if (isRewardRiskTooLow(lastClose, exitPlan)) {
+            return hold(RejectReason.LOW_REWARD_RISK, features, score, confidence)
+        }
+        return TradeSignal(
+            type = if (isLong) SignalType.ENTER_LONG else SignalType.ENTER_SHORT,
+            entryPrice = lastClose,
+            exitPlan = exitPlan,
+            score = score,
+            confidence = confidence,
+            entryReason = EntryReason.W2_COMPLETE_BREAK_W1_END,
+            features = features,
+        )
     }
 
     private fun evaluateSwingBreak(candles: List<Candle>, features: RegimeFeatures?): TradeSignal {

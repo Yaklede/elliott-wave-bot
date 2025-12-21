@@ -46,6 +46,7 @@ strategy:
     minMultiplier: 0.8
   features:
     enableWaveFilter: true
+    enableShortWave: false
     enableTrendFilter: false
     enableVolumeFilter: true
     enableRegimeGate: true
