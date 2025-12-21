@@ -41,6 +41,7 @@ class BacktestRunner(
     private val simulator = BacktestSimulator(
         properties = properties,
         bybitProperties = bybitProperties,
+        strategyProperties = strategyProperties,
         candleResampler = candleResampler,
         orderPriceService = orderPriceService,
         sanityChecks = sanityChecks,

@@ -16,6 +16,7 @@ data class StrategyProperties(
     val feeAware: FeeAwareProperties = FeeAwareProperties(),
     val trendStrength: TrendStrengthProperties = TrendStrengthProperties(),
     val volExpansion: VolExpansionProperties = VolExpansionProperties(),
+    val pyramiding: PyramidingProperties = PyramidingProperties(),
 )
 
 data class ZigZagProperties(
@@ -122,6 +123,13 @@ data class VolExpansionProperties(
     val recentCompressionBars: Int = 40,
     val period: Int = 20,
     val stdDevMultiplier: BigDecimal = BigDecimal("2.0"),
+)
+
+data class PyramidingProperties(
+    val enabled: Boolean = false,
+    val maxAdds: Int = 1,
+    val addOnRiskFraction: BigDecimal = BigDecimal("0.5"),
+    val minBarsBetweenAdds: Int = 4,
 )
 
 data class RegimeProperties(

@@ -7,6 +7,7 @@ import java.math.BigDecimal
 
 enum class PositionSide {
     LONG,
+    SHORT,
     FLAT,
 }
 
@@ -14,6 +15,7 @@ data class Position(
     val side: PositionSide,
     val qty: BigDecimal,
     val avgPrice: BigDecimal,
+    val entryFee: BigDecimal? = null,
     val stopPrice: BigDecimal? = null,
     val takeProfitPrice: BigDecimal? = null,
     val trailActivationPrice: BigDecimal? = null,
@@ -26,6 +28,8 @@ data class Position(
     val confidenceScore: BigDecimal? = null,
     val features: RegimeFeatures? = null,
     val trailingActive: Boolean = false,
+    val addsCount: Int = 0,
+    val lastAddTimeMs: Long? = null,
 ) {
     companion object {
         fun flat(): Position = Position(PositionSide.FLAT, BigDecimal.ZERO, BigDecimal.ZERO)
@@ -34,10 +38,14 @@ data class Position(
 
 
 data class TradeRecord(
+    val side: PositionSide,
     val entryPrice: BigDecimal,
     val exitPrice: BigDecimal,
     val qty: BigDecimal,
     val pnl: BigDecimal,
+    val grossPnl: BigDecimal,
+    val entryFee: BigDecimal,
+    val exitFee: BigDecimal,
     val entryTimeMs: Long,
     val exitTimeMs: Long,
     val entryReason: EntryReason? = null,

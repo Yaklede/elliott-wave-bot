@@ -80,6 +80,11 @@ strategy:
     recentCompressionBars: 40
     period: 20
     stdDevMultiplier: 2.0
+  pyramiding:
+    enabled: true
+    maxAdds: 1
+    addOnRiskFraction: 0.5
+    minBarsBetweenAdds: 4
   regime:
     slopeLookbackBars: 20
     weakSlope: 0.002

@@ -5,6 +5,7 @@ import io.github.yaklede.elliott.wave.principle.coin.config.BotMode
 import io.github.yaklede.elliott.wave.principle.coin.config.BotProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.ResearchProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.exchange.bybit.BybitV5Client
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.MarketDataService
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.IntervalUtil
@@ -36,6 +37,7 @@ class ExecutionEngine(
     private val bybitProperties: BybitProperties,
     private val backtestProperties: BacktestProperties,
     private val researchProperties: ResearchProperties,
+    private val strategyProperties: StrategyProperties,
     private val marketDataService: MarketDataService,
     private val strategyEngine: StrategyEngine,
     private val riskManager: RiskManager,
@@ -187,6 +189,41 @@ class ExecutionEngine(
                 }
             }
         }
+        if (position.side != PositionSide.FLAT && (signal.type == SignalType.ENTER_LONG || signal.type == SignalType.ENTER_SHORT)) {
+            val isLong = signal.type == SignalType.ENTER_LONG
+            if (riskManager.canEnter(now) && canAdd(position, candleTimeMs, intervalMs, isLong)) {
+                val stop = position.stopPrice ?: return
+                val takeProfit = position.takeProfitPrice ?: return
+                val entry = signal.entryPrice ?: closePrice
+                val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, isLong) ?: return
+                val qty = orderSizingService.computeQty(
+                    equity = portfolioService.equity,
+                    entryPrice = priceLevels.entry,
+                    stopPrice = priceLevels.stop,
+                    riskFraction = strategyProperties.pyramiding.addOnRiskFraction,
+                )
+                if (qty > BigDecimal.ZERO) {
+                    if (live) {
+                        if (!isLong) {
+                            log.warn("Live short scale-ins are not supported for spot market orders; skipping add")
+                            return
+                        }
+                        liveModeGuard.ensureLiveAllowed()
+                        val orderLinkId = UUID.randomUUID().toString()
+                        bybitV5Client.placeOrderSpotMarket(
+                            symbol = bybitProperties.symbol,
+                            side = "Buy",
+                            qty = qty,
+                            orderLinkId = orderLinkId,
+                        )
+                    }
+                    val fillPrice = applySlippage(priceLevels.entry, backtestProperties.slippageBps, isBuy = isLong)
+                    portfolioService.addToPosition(qty, fillPrice, backtestProperties.feeRate, candleTimeMs)
+                    portfolioStore.save(portfolioService.snapshot())
+                    riskStateStore.save(riskManager.snapshot())
+                }
+            }
+        }
 
         val openPosition = portfolioService.position
         if (openPosition.side == PositionSide.LONG || openPosition.side == PositionSide.SHORT) {
@@ -294,5 +331,21 @@ class ExecutionEngine(
             }
             else -> null
         }
+    }
+
+    private fun canAdd(
+        position: io.github.yaklede.elliott.wave.principle.coin.portfolio.Position,
+        timeMs: Long,
+        intervalMs: Long,
+        isLongSignal: Boolean,
+    ): Boolean {
+        val pyramiding = strategyProperties.pyramiding
+        if (!pyramiding.enabled) return false
+        if (position.addsCount >= pyramiding.maxAdds) return false
+        if (position.side == PositionSide.LONG && !isLongSignal) return false
+        if (position.side == PositionSide.SHORT && isLongSignal) return false
+        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs ?: return true
+        val bars = (timeMs - lastAdd) / intervalMs
+        return bars >= pyramiding.minBarsBetweenAdds
     }
 }

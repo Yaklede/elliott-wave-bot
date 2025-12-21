@@ -61,6 +61,7 @@ class ResearchRunner(
         val simulator = BacktestSimulator(
             properties = backtestProperties,
             bybitProperties = bybitProperties,
+            strategyProperties = strategyProperties,
             candleResampler = candleResampler,
             orderPriceService = orderPriceService,
             sanityChecks = sanityChecks,
@@ -69,7 +70,7 @@ class ResearchRunner(
 
         when (researchProperties.mode) {
             ResearchMode.REPORT -> {
-                val engine = StrategyEngine(strategyProperties)
+                val engine = StrategyEngine(strategyProperties, backtestProperties)
                 val riskManager = RiskManager(riskProperties)
                 val portfolio = PortfolioService(backtestProperties)
                 val gate = regimeGateProvider.currentGate()

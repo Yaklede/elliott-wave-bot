@@ -55,6 +55,8 @@ class PortfolioService(
             entryScore = entryScore,
             confidenceScore = confidenceScore,
             features = features,
+            addsCount = 0,
+            lastAddTimeMs = timeMs,
         )
         lastMarkPrice = price
     }
@@ -94,8 +96,39 @@ class PortfolioService(
             entryScore = entryScore,
             confidenceScore = confidenceScore,
             features = features,
+            addsCount = 0,
+            lastAddTimeMs = timeMs,
         )
         lastMarkPrice = price
+    }
+
+    fun addToPosition(
+        qty: BigDecimal,
+        price: BigDecimal,
+        feeRate: BigDecimal,
+        timeMs: Long,
+    ): Boolean {
+        if (position.side == PositionSide.FLAT) return false
+        if (qty <= BigDecimal.ZERO) return false
+        val fee = price.multiply(qty).multiply(feeRate)
+        mutableEquity = mutableEquity.subtract(fee)
+
+        val newQty = mutablePosition.qty.add(qty)
+        if (newQty <= BigDecimal.ZERO) return false
+        val weighted = mutablePosition.avgPrice.multiply(mutablePosition.qty)
+            .add(price.multiply(qty))
+        val newAvg = weighted.divide(newQty, 8, java.math.RoundingMode.HALF_UP)
+        val updatedEntryFee = (mutablePosition.entryFee ?: BigDecimal.ZERO).add(fee)
+
+        mutablePosition = mutablePosition.copy(
+            qty = newQty,
+            avgPrice = newAvg,
+            entryFee = updatedEntryFee,
+            addsCount = mutablePosition.addsCount + 1,
+            lastAddTimeMs = timeMs,
+        )
+        lastMarkPrice = price
+        return true
     }
 
     fun exitLong(

@@ -3,6 +3,7 @@ package io.github.yaklede.elliott.wave.principle.coin.backtest
 import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BotMode
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
 import io.github.yaklede.elliott.wave.principle.coin.execution.BotStateStore
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
 import io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle
@@ -22,6 +23,7 @@ import java.time.Instant
 class BacktestSimulator(
     private val properties: BacktestProperties,
     private val bybitProperties: BybitProperties,
+    private val strategyProperties: StrategyProperties,
     private val candleResampler: CandleResampler,
     private val orderPriceService: OrderPriceService,
     private val sanityChecks: BacktestSanityChecks,
@@ -62,10 +64,12 @@ class BacktestSimulator(
             val htfStart = if (htfIndex > maxHtfLookbackBars) htfIndex - maxHtfLookbackBars else 0
             val htfWindow = if (htfIndex == 0) emptyList() else htfCandles.subList(htfStart, htfIndex)
 
-            if (pendingSignal != null && portfolioService.position.side == PositionSide.FLAT) {
+            if (pendingSignal != null) {
                 val plan = pendingSignal!!.exitPlan
-                val isLong = pendingSignal!!.type == SignalType.ENTER_LONG
-                if ((pendingSignal!!.type == SignalType.ENTER_LONG || pendingSignal!!.type == SignalType.ENTER_SHORT) && plan?.stopPrice != null) {
+                val isLongSignal = pendingSignal!!.type == SignalType.ENTER_LONG
+                val isShortSignal = pendingSignal!!.type == SignalType.ENTER_SHORT
+                val position = portfolioService.position
+                if ((isLongSignal || isShortSignal) && plan?.stopPrice != null) {
                     if (!riskManager.canEnter(now)) {
                         if (recordDecisions) {
                             decisions.add(
@@ -84,46 +88,66 @@ class BacktestSimulator(
                         continue
                     }
                     val entry = candle.open
-                    val takeProfit = plan.takeProfitPrice ?: entry
-                    val priceLevels = orderPriceService.adjustPrices(entry, plan.stopPrice, takeProfit, null, isLong)
-                    if (priceLevels != null) {
-                        val qty = riskManager.computeOrderQty(portfolioService.equity, priceLevels.entry, priceLevels.stop)
-                        if (qty > BigDecimal.ZERO) {
-                            val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = isLong)
-                            if (isLong) {
-                                portfolioService.enterLong(
-                                    qty = qty,
-                                    price = fillPrice,
+                    if (position.side == PositionSide.FLAT) {
+                        val takeProfit = plan.takeProfitPrice ?: entry
+                        val priceLevels = orderPriceService.adjustPrices(entry, plan.stopPrice, takeProfit, null, isLongSignal)
+                        if (priceLevels != null) {
+                            val qty = riskManager.computeOrderQty(portfolioService.equity, priceLevels.entry, priceLevels.stop)
+                            if (qty > BigDecimal.ZERO) {
+                                val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = isLongSignal)
+                                if (isLongSignal) {
+                                    portfolioService.enterLong(
+                                        qty = qty,
+                                        price = fillPrice,
+                                        stopPrice = priceLevels.stop,
+                                        takeProfitPrice = priceLevels.takeProfit,
+                                        trailActivationPrice = plan.trailActivationPrice,
+                                        trailDistance = plan.trailDistance,
+                                        timeStopBars = plan.timeStopBars,
+                                        breakEvenPrice = plan.breakEvenPrice,
+                                        feeRate = properties.feeRate,
+                                        timeMs = candle.timeOpenMs,
+                                        entryReason = pendingSignal!!.entryReason,
+                                        entryScore = pendingSignal!!.score,
+                                        confidenceScore = pendingSignal!!.confidence,
+                                        features = pendingSignal!!.features,
+                                    )
+                                } else {
+                                    portfolioService.enterShort(
+                                        qty = qty,
+                                        price = fillPrice,
+                                        stopPrice = priceLevels.stop,
+                                        takeProfitPrice = priceLevels.takeProfit,
+                                        trailActivationPrice = plan.trailActivationPrice,
+                                        trailDistance = plan.trailDistance,
+                                        timeStopBars = plan.timeStopBars,
+                                        breakEvenPrice = plan.breakEvenPrice,
+                                        feeRate = properties.feeRate,
+                                        timeMs = candle.timeOpenMs,
+                                        entryReason = pendingSignal!!.entryReason,
+                                        entryScore = pendingSignal!!.score,
+                                        confidenceScore = pendingSignal!!.confidence,
+                                        features = pendingSignal!!.features,
+                                    )
+                                }
+                            }
+                        }
+                    } else if (canAdd(position, candle.timeOpenMs, intervalMs, isLongSignal, isShortSignal)) {
+                        val stop = position.stopPrice
+                        val takeProfit = position.takeProfitPrice
+                        if (stop != null && takeProfit != null) {
+                            val priceLevels = orderPriceService.adjustPrices(entry, stop, takeProfit, null, isLongSignal)
+                            if (priceLevels != null) {
+                                val qty = riskManager.computeOrderQty(
+                                    equity = portfolioService.equity,
+                                    entryPrice = priceLevels.entry,
                                     stopPrice = priceLevels.stop,
-                                    takeProfitPrice = priceLevels.takeProfit,
-                                    trailActivationPrice = plan.trailActivationPrice,
-                                    trailDistance = plan.trailDistance,
-                                    timeStopBars = plan.timeStopBars,
-                                    breakEvenPrice = plan.breakEvenPrice,
-                                    feeRate = properties.feeRate,
-                                    timeMs = candle.timeOpenMs,
-                                    entryReason = pendingSignal!!.entryReason,
-                                    entryScore = pendingSignal!!.score,
-                                    confidenceScore = pendingSignal!!.confidence,
-                                    features = pendingSignal!!.features,
+                                    riskFraction = strategyProperties.pyramiding.addOnRiskFraction,
                                 )
-                            } else {
-                                portfolioService.enterShort(
-                                    qty = qty,
-                                    price = fillPrice,
-                                    stopPrice = priceLevels.stop,
-                                    takeProfitPrice = priceLevels.takeProfit,
-                                    trailActivationPrice = plan.trailActivationPrice,
-                                    trailDistance = plan.trailDistance,
-                                    timeStopBars = plan.timeStopBars,
-                                    breakEvenPrice = plan.breakEvenPrice,
-                                    feeRate = properties.feeRate,
-                                    timeMs = candle.timeOpenMs,
-                                    entryReason = pendingSignal!!.entryReason,
-                                    entryScore = pendingSignal!!.score,
-                                    confidenceScore = pendingSignal!!.confidence,
-                                    features = pendingSignal!!.features,
-                                )
+                                if (qty > BigDecimal.ZERO) {
+                                    val fillPrice = applySlippage(priceLevels.entry, properties.slippageBps, isBuy = isLongSignal)
+                                    portfolioService.addToPosition(qty, fillPrice, properties.feeRate, candle.timeOpenMs)
+                                }
                             }
                         }
                     }
@@ -261,6 +285,23 @@ class BacktestSimulator(
             trades = trades,
             decisions = decisions,
         )
+    }
+
+    private fun canAdd(
+        position: io.github.yaklede.elliott.wave.principle.coin.portfolio.Position,
+        timeMs: Long,
+        intervalMs: Long,
+        isLongSignal: Boolean,
+        isShortSignal: Boolean,
+    ): Boolean {
+        val pyramiding = strategyProperties.pyramiding
+        if (!pyramiding.enabled) return false
+        if (position.addsCount >= pyramiding.maxAdds) return false
+        if (position.side == PositionSide.LONG && !isLongSignal) return false
+        if (position.side == PositionSide.SHORT && !isShortSignal) return false
+        val lastAdd = position.lastAddTimeMs ?: position.entryTimeMs ?: return true
+        val bars = (timeMs - lastAdd) / intervalMs
+        return bars >= pyramiding.minBarsBetweenAdds
     }
 
     private fun applySlippage(price: BigDecimal, bps: Int, isBuy: Boolean): BigDecimal {
