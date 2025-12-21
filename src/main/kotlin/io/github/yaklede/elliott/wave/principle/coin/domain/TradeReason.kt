@@ -3,6 +3,7 @@ package io.github.yaklede.elliott.wave.principle.coin.domain
 enum class EntryReason {
     W2_COMPLETE_BREAK_W1_END,
     SWING_BREAKOUT,
+    SWING_BREAKDOWN,
 }
 
 enum class ExitReason {
@@ -15,13 +16,17 @@ enum class ExitReason {
 
 enum class RejectReason {
     TREND_FILTER,
+    TREND_STRENGTH_FILTER,
     VOLATILITY_FILTER,
     VOLUME_FILTER,
+    VOL_EXPANSION_FILTER,
+    FEE_EDGE_FILTER,
     STOP_DISTANCE,
     LOW_REWARD_RISK,
     LOW_SCORE,
     NO_SETUP,
     REGIME_GATED,
+    SHORT_GATE,
     RISK_KILLSWITCH,
     COOLDOWN,
 }

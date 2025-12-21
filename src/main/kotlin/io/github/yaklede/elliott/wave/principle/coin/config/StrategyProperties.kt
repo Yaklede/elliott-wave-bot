@@ -17,6 +17,7 @@ data class StrategyProperties(
     val trendStrength: TrendStrengthProperties = TrendStrengthProperties(),
     val volExpansion: VolExpansionProperties = VolExpansionProperties(),
     val pyramiding: PyramidingProperties = PyramidingProperties(),
+    val shortGate: ShortGateProperties = ShortGateProperties(),
 )
 
 data class ZigZagProperties(
@@ -123,6 +124,13 @@ data class VolExpansionProperties(
     val recentCompressionBars: Int = 40,
     val period: Int = 20,
     val stdDevMultiplier: BigDecimal = BigDecimal("2.0"),
+)
+
+data class ShortGateProperties(
+    val enabled: Boolean = false,
+    val requireDowntrend: Boolean = true,
+    val allowed: List<String> = emptyList(),
+    val blocked: List<String> = emptyList(),
 )
 
 data class PyramidingProperties(

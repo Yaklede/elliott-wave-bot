@@ -101,6 +101,12 @@ strategy:
     allowed:
       - UP_STRONG|LOW|HIGH
       - FLAT|HIGH|HIGH
+  shortGate:
+    enabled: true
+    requireDowntrend: true
+    allowed:
+      - DOWN_STRONG|MID|HIGH
+      - DOWN_STRONG|HIGH|HIGH
 
 risk:
   riskPerTrade: 0.05

@@ -60,30 +60,19 @@ class StrategyEngine(
         if (!passesVolExpansionFilter(candles)) {
             return hold(RejectReason.VOL_EXPANSION_FILTER, features)
         }
-        if (properties.features.enableRegimeGate && regimeGate != null && features != null) {
-            val bucket = RegimeBucketer.bucket(
-                features = features,
-                thresholds = regimeGate.thresholds,
-                weakSlope = properties.regime.weakSlope,
-                strongSlope = properties.regime.strongSlope,
-            )
-            if (regimeGate.isBlocked(bucket)) {
-                return hold(RejectReason.REGIME_GATED, features)
-            }
-        }
 
         return if (properties.features.enableWaveFilter) {
-            val waveSignal = evaluateWave(candles, htfCandles, features)
+            val waveSignal = evaluateWave(candles, htfCandles, features, regimeGate)
             if (properties.features.enableSwingFallback &&
                 waveSignal.type == SignalType.HOLD &&
                 waveSignal.rejectReason == RejectReason.NO_SETUP
             ) {
-                evaluateSwingBreak(candles, features)
+                evaluateSwingBreak(candles, features, regimeGate, htfCandles)
             } else {
                 waveSignal
             }
         } else {
-            evaluateSwingBreak(candles, features)
+            evaluateSwingBreak(candles, features, regimeGate, htfCandles)
         }
     }
 
@@ -91,6 +80,7 @@ class StrategyEngine(
         candles: List<Candle>,
         htfCandles: List<Candle>,
         features: RegimeFeatures?,
+        regimeGate: RegimeGate?,
     ): TradeSignal {
         val swings = zigZagExtractor.extract(candles)
         val wave2Long = detector.findWave2Setup(swings)
@@ -104,8 +94,8 @@ class StrategyEngine(
         val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
             .lastOrNull { it != null }
         val lastClose = candles.last().close
-        val longSignal = wave2Long?.let { buildWaveSignal(it, true, candles, htfCandles, features, atrValue, lastClose) }
-        val shortSignal = wave2Short?.let { buildWaveSignal(it, false, candles, htfCandles, features, atrValue, lastClose) }
+        val longSignal = wave2Long?.let { buildWaveSignal(it, true, candles, htfCandles, features, atrValue, lastClose, regimeGate) }
+        val shortSignal = wave2Short?.let { buildWaveSignal(it, false, candles, htfCandles, features, atrValue, lastClose, regimeGate) }
 
         val candidates = listOfNotNull(longSignal, shortSignal).filter { it.type != SignalType.HOLD }
         if (candidates.isEmpty()) {
@@ -124,7 +114,26 @@ class StrategyEngine(
         features: RegimeFeatures?,
         atrValue: BigDecimal?,
         lastClose: BigDecimal,
+        regimeGate: RegimeGate?,
     ): TradeSignal {
+        if (isLong) {
+            if (properties.features.enableRegimeGate && features != null && regimeGate != null) {
+                val bucket = RegimeBucketer.bucket(
+                    features = features,
+                    thresholds = regimeGate.thresholds,
+                    weakSlope = properties.regime.weakSlope,
+                    strongSlope = properties.regime.strongSlope,
+                )
+                if (regimeGate.isBlocked(bucket)) {
+                    return hold(RejectReason.REGIME_GATED, features)
+                }
+            }
+        } else {
+            if (!passesShortGate(features, htfCandles)) {
+                return hold(RejectReason.SHORT_GATE, features)
+            }
+        }
+
         val score = scorer.scoreWave2(setup, candles, htfCandles, properties.elliott, properties.volume, isLong)
         val confidence = scorer.confidenceScore(
             setup = setup,
@@ -185,6 +194,15 @@ class StrategyEngine(
     }
 
     private fun evaluateSwingBreak(candles: List<Candle>, features: RegimeFeatures?): TradeSignal {
+        return evaluateSwingBreak(candles, features, null, emptyList())
+    }
+
+    private fun evaluateSwingBreak(
+        candles: List<Candle>,
+        features: RegimeFeatures?,
+        regimeGate: RegimeGate?,
+        htfCandles: List<Candle>,
+    ): TradeSignal {
         val swings = zigZagExtractor.extract(candles)
         val lastHigh = swings.lastOrNull { it.type == SwingType.HIGH }
         val lastLow = swings.lastOrNull { it.type == SwingType.LOW }
@@ -196,6 +214,17 @@ class StrategyEngine(
             .lastOrNull { it != null }
 
         if (lastClose > lastHigh.price) {
+            if (properties.features.enableRegimeGate && features != null && regimeGate != null) {
+                val bucket = RegimeBucketer.bucket(
+                    features = features,
+                    thresholds = regimeGate.thresholds,
+                    weakSlope = properties.regime.weakSlope,
+                    strongSlope = properties.regime.strongSlope,
+                )
+                if (regimeGate.isBlocked(bucket)) {
+                    return hold(RejectReason.REGIME_GATED, features)
+                }
+            }
             val entryOk = when (properties.features.entryModel) {
                 EntryModel.MOMENTUM_CONFIRM -> lastClose > prev.high
                 else -> true
@@ -234,6 +263,9 @@ class StrategyEngine(
         }
 
         if (lastClose < lastLow.price) {
+            if (!passesShortGate(features, htfCandles)) {
+                return hold(RejectReason.SHORT_GATE, features)
+            }
             val entryOk = when (properties.features.entryModel) {
                 EntryModel.MOMENTUM_CONFIRM -> lastClose < prev.low
                 else -> true
@@ -293,6 +325,61 @@ class StrategyEngine(
         val sma50 = sma(htfCandles.takeLast(50))
         val sma200 = sma(htfCandles.takeLast(200))
         return sma50 > sma200
+    }
+
+    private fun passesDownTrendFilter(htfCandles: List<Candle>): Boolean {
+        if (htfCandles.size < 200) return false
+        val sma50 = sma(htfCandles.takeLast(50))
+        val sma200 = sma(htfCandles.takeLast(200))
+        return sma50 < sma200
+    }
+
+    private fun passesShortGate(features: RegimeFeatures?, htfCandles: List<Candle>): Boolean {
+        if (!properties.shortGate.enabled) return true
+        if (properties.shortGate.requireDowntrend && !passesDownTrendFilter(htfCandles)) return false
+        val thresholds = properties.regime.thresholds
+        if (thresholds.atrLow <= BigDecimal.ZERO ||
+            thresholds.atrHigh <= BigDecimal.ZERO ||
+            thresholds.volumeLow <= BigDecimal.ZERO ||
+            thresholds.volumeHigh <= BigDecimal.ZERO
+        ) {
+            return true
+        }
+        val f = features ?: return false
+        val bucket = RegimeBucketer.bucket(
+            features = f,
+            thresholds = io.github.yaklede.elliott.wave.principle.coin.domain.RegimeThresholds(
+                atrLow = thresholds.atrLow,
+                atrHigh = thresholds.atrHigh,
+                volumeLow = thresholds.volumeLow,
+                volumeHigh = thresholds.volumeHigh,
+            ),
+            weakSlope = properties.regime.weakSlope,
+            strongSlope = properties.regime.strongSlope,
+        )
+        val allowed = properties.shortGate.allowed.mapNotNull { parseBucket(it) }.toSet()
+        val blocked = properties.shortGate.blocked.mapNotNull { parseBucket(it) }.toSet()
+        if (allowed.isNotEmpty() && bucket !in allowed) return false
+        if (blocked.contains(bucket)) return false
+        return true
+    }
+
+    private fun parseBucket(raw: String): io.github.yaklede.elliott.wave.principle.coin.domain.RegimeBucketKey? {
+        val cleaned = raw.trim()
+        if (cleaned.isEmpty()) return null
+        val parts = cleaned.split('|', ',', ';')
+            .map { it.trim().uppercase() }
+            .filter { it.isNotEmpty() }
+        if (parts.size != 3) return null
+        return try {
+            io.github.yaklede.elliott.wave.principle.coin.domain.RegimeBucketKey(
+                trend = io.github.yaklede.elliott.wave.principle.coin.domain.TrendBucket.valueOf(parts[0]),
+                vol = io.github.yaklede.elliott.wave.principle.coin.domain.VolBucket.valueOf(parts[1]),
+                volume = io.github.yaklede.elliott.wave.principle.coin.domain.VolumeBucket.valueOf(parts[2]),
+            )
+        } catch (_: IllegalArgumentException) {
+            null
+        }
     }
 
     private fun passesTrendStrengthFilter(htfCandles: List<Candle>): Boolean {
