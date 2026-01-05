@@ -58,7 +58,7 @@ strategy:
     enabled: true
     model: ADX
     n: 14
-    threshold: 25
+    threshold: 30
   volExpansion:
     enabled: true
     lookback: 180
