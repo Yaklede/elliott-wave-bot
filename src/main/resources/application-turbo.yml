@@ -1,0 +1,116 @@
+spring:
+  config:
+    activate:
+      on-profile: turbo
+
+bybit:
+  category: spot
+  symbol: BTCUSDT
+  interval: 3          # 3분 캔들로 트레이드
+  lowInterval: 1       # 트리거/미세 신호용
+  htfInterval: 15      # 추세 판별용
+
+bot:
+  mode: BACKTEST
+
+backtest:
+  csvPath: data/bybit_btcusdt_3m_365d.csv
+  initialCapital: 1000
+  feeRate: 0.0006
+  slippageBps: 4       # 더 보수적인 슬리피지 반영
+  maxLookbackBars: 1200
+  maxHtfLookbackBars: 800
+  maxLtfLookbackBars: 2000
+
+strategy:
+  features:
+    enableWaveFilter: true
+    enableShortWave: true
+    enableTrendFilter: true
+    enableVolumeFilter: false
+    enableRegimeGate: false
+    enableSwingFallback: true
+    entryModel: FAST_BREAKOUT
+    exitModel: HYBRID
+  zigzag:
+    mode: ATR
+    atrPeriod: 14
+    atrMultiplier: 1.2
+  elliott:
+    minScoreToTrade: 0.40
+    swingAtrMultiplier: 1.5
+    fib:
+      wave2PreferredMin: 0.45
+      wave2PreferredMax: 0.70
+      takeProfitExtension: 2.5
+  volatility:
+    atrPeriod: 14
+    minAtrPercent: 0.0008
+    maxAtrPercent: 0.08
+  volume:
+    period: 20
+    minMultiplier: 0.6
+  feeAware:
+    enabled: false      # 고위험 모드: 수수료 필터 해제
+  trendStrength:
+    enabled: true
+    model: ADX
+    n: 14
+    threshold: 18
+  volExpansion:
+    enabled: true
+    lookback: 180
+    compressionQuantile: 0.15
+    requireRising: true
+    recentCompressionBars: 60
+    period: 20
+    stdDevMultiplier: 2.0
+  fastBreakout:
+    lookbackBars: 30
+    atrStopMultiplier: 0.9
+    atrTakeProfitMultiplier: 3.8
+    breakoutAtrBuffer: 0.15
+    minBodyAtr: 0.25
+  exit:
+    atrStopMultiplier: 1.0
+    atrTakeProfitMultiplier: 4.5
+    trailActivationAtr: 1.5
+    trailDistanceAtr: 0.8
+    timeStopBars: 64
+    maxStopAtrMultiplier: 6.0
+    breakEvenAtr: 0.8
+  entry:
+    minRewardRisk: 1.6
+  pyramiding:
+    enabled: true
+    maxAdds: 3
+    addOnRiskFraction: 0.6
+    minBarsBetweenAdds: 3
+    triggerModel: ATR_MOVE
+    minMoveAtr: 0.35
+  shortGate:
+    enabled: true
+    requireDowntrend: true
+    allowed:
+      - DOWN_STRONG|HIGH|HIGH
+      - DOWN_STRONG|MID|HIGH
+      - DOWN_STRONG|HIGH|NORMAL
+      - DOWN_STRONG|MID|NORMAL
+    blocked: []
+
+risk:
+  riskPerTrade: 0.08          # 고위험: 8% 리스크/포지션
+  dailyMaxDd: 0.35
+  maxConsecutiveLosses: 4
+  cooldownMinutes: 30
+  minQty: 0.0
+  maxQty: 1000000.0
+  maxLeverage: 50
+  compounding:
+    enabled: true
+    minRiskPerTrade: 0.05
+    maxRiskPerTrade: 0.30
+    scaleUp: 1.35
+    scaleDown: 0.80
+    minMultiplier: 0.7
+    maxMultiplier: 6.0
