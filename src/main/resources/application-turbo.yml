@@ -28,7 +28,7 @@ strategy:
     enableShortWave: true
     enableTrendFilter: true
     enableVolumeFilter: false
-    enableRegimeGate: false
+    enableRegimeGate: true
     enableSwingFallback: true
     entryModel: FAST_BREAKOUT
     exitModel: HYBRID
@@ -67,6 +67,30 @@ strategy:
     recentCompressionBars: 60
     period: 20
     stdDevMultiplier: 2.0
+  regime:
+    minTradesPerBucket: 10
+    thresholds:
+      atrLow: 0.001501
+      atrHigh: 0.002129
+      volumeLow: 1.601400
+      volumeHigh: 2.553619
+    blocked:
+      - DOWN_STRONG|HIGH|HIGH
+      - UP_WEAK|MID|NORMAL
+      - UP_WEAK|LOW|NORMAL
+      - UP_WEAK|LOW|HIGH
+      - UP_WEAK|LOW|LOW
+      - UP_WEAK|MID|LOW
+      - DOWN_STRONG|HIGH|NORMAL
+      - UP_WEAK|MID|HIGH
+      - FLAT|LOW|LOW
+      - FLAT|MID|HIGH
+      - FLAT|LOW|HIGH
+      - UP_WEAK|HIGH|LOW
+      - FLAT|LOW|NORMAL
+      - FLAT|MID|LOW
+      - FLAT|HIGH|NORMAL
+      - UP_WEAK|HIGH|HIGH
   fastBreakout:
     lookbackBars: 30
     atrStopMultiplier: 1.1
