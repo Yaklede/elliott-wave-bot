@@ -93,17 +93,17 @@ strategy:
       - UP_WEAK|HIGH|HIGH
   fastBreakout:
     lookbackBars: 30
-    atrStopMultiplier: 1.1
+    atrStopMultiplier: 1.4
     atrTakeProfitMultiplier: 3.5
     breakoutAtrBuffer: 0.30
     minBodyAtr: 0.60
   exit:
-    atrStopMultiplier: 1.0
+    atrStopMultiplier: 1.3
     atrTakeProfitMultiplier: 4.5
     trailActivationAtr: 1.5
     trailDistanceAtr: 0.8
     timeStopBars: 64
-    maxStopAtrMultiplier: 6.0
+    maxStopAtrMultiplier: 8.0
     breakEvenAtr: 0.8
   entry:
     minRewardRisk: 2.2
