@@ -51,7 +51,9 @@ strategy:
     period: 20
     minMultiplier: 0.6
   feeAware:
-    enabled: false      # 고위험 모드: 수수료 필터 해제
+    enabled: true
+    minEdgeMultiple: 2.5
+    bufferBps: 2
   trendStrength:
     enabled: true
     model: ADX
@@ -67,10 +69,10 @@ strategy:
     stdDevMultiplier: 2.0
   fastBreakout:
     lookbackBars: 30
-    atrStopMultiplier: 0.9
-    atrTakeProfitMultiplier: 3.8
-    breakoutAtrBuffer: 0.15
-    minBodyAtr: 0.25
+    atrStopMultiplier: 1.1
+    atrTakeProfitMultiplier: 3.5
+    breakoutAtrBuffer: 0.30
+    minBodyAtr: 0.60
   exit:
     atrStopMultiplier: 1.0
     atrTakeProfitMultiplier: 4.5
@@ -80,14 +82,14 @@ strategy:
     maxStopAtrMultiplier: 6.0
     breakEvenAtr: 0.8
   entry:
-    minRewardRisk: 1.6
+    minRewardRisk: 2.2
   pyramiding:
-    enabled: true
-    maxAdds: 3
-    addOnRiskFraction: 0.6
-    minBarsBetweenAdds: 3
+    enabled: false
+    maxAdds: 1
+    addOnRiskFraction: 0.5
+    minBarsBetweenAdds: 4
     triggerModel: ATR_MOVE
-    minMoveAtr: 0.35
+    minMoveAtr: 0.5
   shortGate:
     enabled: true
     requireDowntrend: true
@@ -99,18 +101,18 @@ strategy:
     blocked: []
 
 risk:
-  riskPerTrade: 0.08          # 고위험: 8% 리스크/포지션
-  dailyMaxDd: 0.35
-  maxConsecutiveLosses: 4
-  cooldownMinutes: 30
+  riskPerTrade: 0.05
+  dailyMaxDd: 0.25
+  maxConsecutiveLosses: 3
+  cooldownMinutes: 45
   minQty: 0.0
   maxQty: 1000000.0
   maxLeverage: 50
   compounding:
     enabled: true
-    minRiskPerTrade: 0.05
-    maxRiskPerTrade: 0.30
-    scaleUp: 1.35
-    scaleDown: 0.80
-    minMultiplier: 0.7
-    maxMultiplier: 6.0
+    minRiskPerTrade: 0.03
+    maxRiskPerTrade: 0.20
+    scaleUp: 1.25
+    scaleDown: 0.85
+    minMultiplier: 0.8
+    maxMultiplier: 4.0
