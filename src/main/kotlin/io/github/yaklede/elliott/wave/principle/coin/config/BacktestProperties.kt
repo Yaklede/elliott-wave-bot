@@ -10,6 +10,7 @@ data class BacktestProperties(
     val slippageBps: Int = 2,
     val maxLookbackBars: Int = 600,
     val maxHtfLookbackBars: Int? = null,
+    val maxLtfLookbackBars: Int? = null,
     val startMs: Long? = null,
     val endMs: Long? = null,
     val csvPath: String? = null,

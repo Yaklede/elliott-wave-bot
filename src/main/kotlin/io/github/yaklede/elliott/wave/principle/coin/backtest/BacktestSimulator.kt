@@ -53,6 +53,10 @@ class BacktestSimulator(
         var htfIndex = 0
         val maxLookbackBars = properties.maxLookbackBars
         val maxHtfLookbackBars = properties.maxHtfLookbackBars ?: maxLookbackBars
+        val ltfIntervalMs = bybitProperties.lowInterval?.let { IntervalUtil.intervalToMillis(it) }
+        val ltfCandles = ltfIntervalMs?.let { candleResampler.resample(candles, it) } ?: candles
+        var ltfIndex = 0
+        val maxLtfLookbackBars = properties.maxLtfLookbackBars ?: maxLookbackBars
 
         var pendingSignal: io.github.yaklede.elliott.wave.principle.coin.strategy.elliott.TradeSignal? = null
         val decisions = mutableListOf<DecisionRecord>()
@@ -65,6 +69,11 @@ class BacktestSimulator(
             }
             val htfStart = if (htfIndex > maxHtfLookbackBars) htfIndex - maxHtfLookbackBars else 0
             val htfWindow = if (htfIndex == 0) emptyList() else htfCandles.subList(htfStart, htfIndex)
+            while (ltfIndex < ltfCandles.size && ltfCandles[ltfIndex].timeOpenMs <= candle.timeOpenMs) {
+                ltfIndex += 1
+            }
+            val ltfStart = if (ltfIndex > maxLtfLookbackBars) ltfIndex - maxLtfLookbackBars else 0
+            val ltfWindow = if (ltfIndex == 0) emptyList() else ltfCandles.subList(ltfStart, ltfIndex)
 
             if (pendingSignal != null) {
                 val plan = pendingSignal!!.exitPlan
@@ -219,7 +228,7 @@ class BacktestSimulator(
                 .divide(equityPeak, 6, RoundingMode.HALF_UP)
             if (drawdown > maxDrawdown) maxDrawdown = drawdown
 
-            val signal = strategyEngine.evaluate(window, htfWindow, regimeGate)
+            val signal = strategyEngine.evaluate(window, htfWindow, ltfWindow, regimeGate)
             if (recordDecisions) {
                 decisions.add(
                     DecisionRecord(

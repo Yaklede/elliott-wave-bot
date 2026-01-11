@@ -44,7 +44,7 @@ class AblationRunner(
         )
 
         val results = cases.map { case ->
-            val engine = StrategyEngine(case.strategy)
+            val engine = StrategyEngine(case.strategy, backtestProperties)
             val riskManager = RiskManager(riskProperties)
             val portfolio = PortfolioService(backtestProperties)
             val run = simulator.run(

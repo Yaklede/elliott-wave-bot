@@ -6,13 +6,22 @@ import java.math.RoundingMode
 import java.time.Duration
 
 class TradeMetricsCalculator {
-    fun computeTradeMetrics(trades: List<TradeRecord>): TradeMetrics {
+    fun computeTradeMetrics(trades: List<TradeRecord>): TradeMetrics =
+        computeTradeMetrics(trades) { it.pnl }
+
+    fun computeGrossTradeMetrics(trades: List<TradeRecord>): TradeMetrics =
+        computeTradeMetrics(trades) { it.grossPnl }
+
+    fun computeTradeMetrics(
+        trades: List<TradeRecord>,
+        pnlSelector: (TradeRecord) -> BigDecimal,
+    ): TradeMetrics {
         if (trades.isEmpty()) return TradeMetrics.zero()
-        val wins = trades.filter { it.pnl > BigDecimal.ZERO }
-        val losses = trades.filter { it.pnl < BigDecimal.ZERO }
+        val wins = trades.filter { pnlSelector(it) > BigDecimal.ZERO }
+        val losses = trades.filter { pnlSelector(it) < BigDecimal.ZERO }
         val winRate = BigDecimal(wins.size).divide(BigDecimal(trades.size), 4, RoundingMode.HALF_UP)
-        val avgWin = average(wins.map { it.pnl })
-        val avgLoss = average(losses.map { it.pnl.abs() })
+        val avgWin = average(wins.map(pnlSelector))
+        val avgLoss = average(losses.map { pnlSelector(it).abs() })
         val expectancy = winRate.multiply(avgWin)
             .subtract(BigDecimal.ONE.subtract(winRate).multiply(avgLoss))
         return TradeMetrics(winRate, avgWin, avgLoss, expectancy)
@@ -51,6 +60,21 @@ class TradeMetricsCalculator {
         val index = (p * (values.size - 1)).toInt().coerceIn(0, values.size - 1)
         return values[index]
     }
+
+    fun computeFeeMetrics(trades: List<TradeRecord>): FeeMetrics {
+        if (trades.isEmpty()) return FeeMetrics.zero()
+        val totalFees = trades.fold(BigDecimal.ZERO) { acc, t -> acc.add(t.entryFee).add(t.exitFee) }
+        val avgFee = totalFees.divide(BigDecimal(trades.size), 6, RoundingMode.HALF_UP)
+        val avgBps = trades.map { trade ->
+            val notional = trade.entryPrice.multiply(trade.qty)
+            if (notional <= BigDecimal.ZERO) BigDecimal.ZERO else {
+                trade.entryFee.add(trade.exitFee)
+                    .divide(notional, 8, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal("10000"))
+            }
+        }.let { average(it) }
+        return FeeMetrics(avgFee, avgBps)
+    }
 }
 
 data class TradeMetrics(
@@ -82,5 +106,14 @@ data class HoldingMetrics(
 ) {
     companion object {
         fun zero() = HoldingMetrics(BigDecimal.ZERO, 0.0)
+    }
+}
+
+data class FeeMetrics(
+    val avgFeePerTrade: BigDecimal,
+    val feeDragBpsPerTrade: BigDecimal,
+) {
+    companion object {
+        fun zero() = FeeMetrics(BigDecimal.ZERO, BigDecimal.ZERO)
     }
 }

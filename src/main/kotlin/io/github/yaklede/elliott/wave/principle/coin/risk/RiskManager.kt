@@ -38,14 +38,17 @@ class RiskManager(
         equity: BigDecimal,
         entryPrice: BigDecimal,
         stopPrice: BigDecimal,
+        riskFraction: BigDecimal = BigDecimal.ONE,
     ): BigDecimal {
         if (equity <= BigDecimal.ZERO) return BigDecimal.ZERO
         val stopDistance = entryPrice.subtract(stopPrice).abs()
         if (stopDistance <= BigDecimal.ZERO) return BigDecimal.ZERO
 
-        val riskAmount = equity.multiply(currentRiskPerTrade())
+        val riskAmount = equity.multiply(currentRiskPerTrade()).multiply(riskFraction)
         val rawQty = riskAmount.divide(stopDistance, 8, RoundingMode.DOWN)
-        return rawQty
+        val leverageCap = maxQtyByLeverage(equity, entryPrice)
+        val cappedQty = if (leverageCap == null) rawQty else rawQty.coerceAtMost(leverageCap)
+        return cappedQty
             .coerceAtLeast(properties.minQty)
             .coerceAtMost(properties.maxQty)
     }
@@ -119,6 +122,13 @@ class RiskManager(
         return next
             .coerceAtLeast(properties.compounding.minMultiplier)
             .coerceAtMost(properties.compounding.maxMultiplier)
+    }
+
+    private fun maxQtyByLeverage(equity: BigDecimal, entryPrice: BigDecimal): BigDecimal? {
+        if (properties.maxLeverage <= BigDecimal.ZERO) return null
+        if (entryPrice <= BigDecimal.ZERO) return null
+        val maxNotional = equity.multiply(properties.maxLeverage)
+        return maxNotional.divide(entryPrice, 8, RoundingMode.DOWN)
     }
 }
 

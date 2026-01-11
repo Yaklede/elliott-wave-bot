@@ -33,10 +33,12 @@ class StrategyEngine(
     fun evaluate(
         candles: List<Candle>,
         htfCandles: List<Candle>,
+        ltfCandles: List<Candle> = emptyList(),
         regimeGate: RegimeGate? = null,
     ): TradeSignal {
         if (candles.size < 10) return hold(RejectReason.NO_SETUP)
 
+        val triggerCandles = if (ltfCandles.isNotEmpty()) ltfCandles else candles
         val features = featureCalculator.calculate(
             candles = candles,
             htfCandles = htfCandles,
@@ -59,27 +61,28 @@ class StrategyEngine(
         }
 
         if (properties.features.entryModel == EntryModel.FAST_BREAKOUT) {
-            return evaluateFastBreakout(candles, htfCandles, features, regimeGate)
+            return evaluateFastBreakout(candles, htfCandles, triggerCandles, features, regimeGate)
         }
 
         return if (properties.features.enableWaveFilter) {
-            val waveSignal = evaluateWave(candles, htfCandles, features, regimeGate)
+            val waveSignal = evaluateWave(candles, htfCandles, triggerCandles, features, regimeGate)
             if (properties.features.enableSwingFallback &&
                 waveSignal.type == SignalType.HOLD &&
                 waveSignal.rejectReason == RejectReason.NO_SETUP
             ) {
-                evaluateSwingBreak(candles, features, regimeGate, htfCandles)
+                evaluateSwingBreak(candles, triggerCandles, features, regimeGate, htfCandles)
             } else {
                 waveSignal
             }
         } else {
-            evaluateSwingBreak(candles, features, regimeGate, htfCandles)
+            evaluateSwingBreak(candles, triggerCandles, features, regimeGate, htfCandles)
         }
     }
 
     private fun evaluateWave(
         candles: List<Candle>,
         htfCandles: List<Candle>,
+        triggerCandles: List<Candle>,
         features: RegimeFeatures?,
         regimeGate: RegimeGate?,
     ): TradeSignal {
@@ -94,9 +97,9 @@ class StrategyEngine(
 
         val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
             .lastOrNull { it != null }
-        val lastClose = candles.last().close
-        val longSignal = wave2Long?.let { buildWaveSignal(it, true, candles, htfCandles, features, atrValue, lastClose, regimeGate) }
-        val shortSignal = wave2Short?.let { buildWaveSignal(it, false, candles, htfCandles, features, atrValue, lastClose, regimeGate) }
+        val lastClose = triggerCandles.last().close
+        val longSignal = wave2Long?.let { buildWaveSignal(it, true, candles, htfCandles, triggerCandles, features, atrValue, lastClose, regimeGate) }
+        val shortSignal = wave2Short?.let { buildWaveSignal(it, false, candles, htfCandles, triggerCandles, features, atrValue, lastClose, regimeGate) }
 
         val candidates = listOfNotNull(longSignal, shortSignal).filter { it.type != SignalType.HOLD }
         if (candidates.isEmpty()) {
@@ -110,6 +113,7 @@ class StrategyEngine(
     private fun evaluateFastBreakout(
         candles: List<Candle>,
         htfCandles: List<Candle>,
+        triggerCandles: List<Candle>,
         features: RegimeFeatures?,
         regimeGate: RegimeGate?,
     ): TradeSignal {
@@ -118,7 +122,8 @@ class StrategyEngine(
         val window = candles.subList(candles.size - lookback - 1, candles.size - 1)
         val maxHigh = window.maxOf { it.high }
         val minLow = window.minOf { it.low }
-        val lastClose = candles.last().close
+        val triggerSource = if (triggerCandles.isNotEmpty()) triggerCandles else candles
+        val lastClose = triggerSource.last().close
         val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
             .lastOrNull { it != null } ?: return hold(RejectReason.NO_SETUP, features)
 
@@ -232,6 +237,7 @@ class StrategyEngine(
         isLong: Boolean,
         candles: List<Candle>,
         htfCandles: List<Candle>,
+        triggerCandles: List<Candle>,
         features: RegimeFeatures?,
         atrValue: BigDecimal?,
         lastClose: BigDecimal,
@@ -270,7 +276,8 @@ class StrategyEngine(
             isLong = isLong,
         )
         val threshold = properties.elliott.minScoreToTrade
-        val prev = candles[candles.size - 2]
+        val prevSource = triggerCandles.takeIf { it.size >= 2 } ?: candles
+        val prev = prevSource[prevSource.size - 2]
         val entryOk = when (properties.features.entryModel) {
             EntryModel.BASELINE -> score >= threshold
             EntryModel.CONFIDENCE_THRESHOLD -> confidence >= threshold
@@ -321,11 +328,12 @@ class StrategyEngine(
     }
 
     private fun evaluateSwingBreak(candles: List<Candle>, features: RegimeFeatures?): TradeSignal {
-        return evaluateSwingBreak(candles, features, null, emptyList())
+        return evaluateSwingBreak(candles, candles, features, null, emptyList())
     }
 
     private fun evaluateSwingBreak(
         candles: List<Candle>,
+        triggerCandles: List<Candle>,
         features: RegimeFeatures?,
         regimeGate: RegimeGate?,
         htfCandles: List<Candle>,
@@ -335,8 +343,9 @@ class StrategyEngine(
         val lastLow = swings.lastOrNull { it.type == SwingType.LOW }
         if (lastHigh == null || lastLow == null) return hold(RejectReason.NO_SETUP, features)
 
-        val lastClose = candles.last().close
-        val prev = candles[candles.size - 2]
+        val lastClose = triggerCandles.last().close
+        val prevSource = triggerCandles.takeIf { it.size >= 2 } ?: candles
+        val prev = prevSource[prevSource.size - 2]
         val atrValue = atrCalculator.calculate(candles, properties.volatility.atrPeriod)
             .lastOrNull { it != null }
 

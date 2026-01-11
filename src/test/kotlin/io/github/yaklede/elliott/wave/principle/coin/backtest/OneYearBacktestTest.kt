@@ -2,8 +2,11 @@ package io.github.yaklede.elliott.wave.principle.coin.backtest
 
 import io.github.yaklede.elliott.wave.principle.coin.config.BacktestProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.BybitProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.FeeAwareProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.RiskProperties
 import io.github.yaklede.elliott.wave.principle.coin.config.StrategyProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.TrendStrengthProperties
+import io.github.yaklede.elliott.wave.principle.coin.config.VolExpansionProperties
 import io.github.yaklede.elliott.wave.principle.coin.execution.BotStateStore
 import io.github.yaklede.elliott.wave.principle.coin.execution.OrderPriceService
 import io.github.yaklede.elliott.wave.principle.coin.execution.RegimeGateProvider
@@ -43,8 +46,12 @@ class OneYearBacktestTest {
             interval = "15",
             htfInterval = "60",
         )
-        val strategyProperties = StrategyProperties()
-        val strategyEngine = StrategyEngine(strategyProperties)
+        val strategyProperties = StrategyProperties(
+            feeAware = FeeAwareProperties(enabled = false),
+            trendStrength = TrendStrengthProperties(enabled = false),
+            volExpansion = VolExpansionProperties(enabled = false),
+        )
+        val strategyEngine = StrategyEngine(strategyProperties, backtestProperties)
         val riskManager = RiskManager(RiskProperties())
         val portfolioService = PortfolioService(backtestProperties)
         val botStateStore = BotStateStore()

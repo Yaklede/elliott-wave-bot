@@ -13,5 +13,7 @@ data class BybitProperties(
     val category: String = "spot",
     val symbol: String = "BTCUSDT",
     val interval: String = "15",
+    val lowInterval: String? = null,
+    val midIntervals: List<String> = emptyList(),
     val htfInterval: String = "60",
 )

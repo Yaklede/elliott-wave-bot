@@ -18,6 +18,7 @@ class RiskSizingTest {
             cooldownMinutes = 60,
             minQty = BigDecimal("0.1"),
             maxQty = BigDecimal("5"),
+            maxLeverage = BigDecimal("100"),
         )
         val clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC)
         val manager = RiskManager(properties, clock)

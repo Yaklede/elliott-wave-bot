@@ -16,9 +16,10 @@ class OrderPriceService(
         entry: BigDecimal,
         stop: BigDecimal,
         takeProfit: BigDecimal,
+        isLong: Boolean,
     ): PriceLevels? {
         val filters = instrumentInfoService.getFilters(bybitProperties.category, bybitProperties.symbol)
-        return adjustPrices(entry, stop, takeProfit, filters)
+        return adjustPrices(entry, stop, takeProfit, filters, isLong)
     }
 
     fun adjustPrices(
@@ -26,6 +27,7 @@ class OrderPriceService(
         stop: BigDecimal,
         takeProfit: BigDecimal,
         filters: InstrumentFilters?,
+        isLong: Boolean,
     ): PriceLevels? {
         var adjustedStop = stop
         var adjustedTp = takeProfit
@@ -43,8 +45,13 @@ class OrderPriceService(
         if (maxPrice != null && (adjustedStop > maxPrice || adjustedTp > maxPrice || entry > maxPrice)) {
             return null
         }
-        if (adjustedStop >= entry) return null
-        if (adjustedTp <= entry) return null
+        if (isLong) {
+            if (adjustedStop >= entry) return null
+            if (adjustedTp <= entry) return null
+        } else {
+            if (adjustedStop <= entry) return null
+            if (adjustedTp >= entry) return null
+        }
 
         return PriceLevels(entry, adjustedStop, adjustedTp)
     }

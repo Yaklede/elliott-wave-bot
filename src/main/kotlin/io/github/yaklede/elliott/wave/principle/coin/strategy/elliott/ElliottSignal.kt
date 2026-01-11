@@ -7,7 +7,9 @@ import java.math.BigDecimal
 
 enum class SignalType {
     ENTER_LONG,
+    ENTER_SHORT,
     EXIT_LONG,
+    EXIT_SHORT,
     HOLD,
 }
 

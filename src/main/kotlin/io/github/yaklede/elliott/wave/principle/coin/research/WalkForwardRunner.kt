@@ -100,7 +100,7 @@ class WalkForwardRunner(
     }
 
     private fun runCandidate(strategy: StrategyProperties, candles: List<Candle>, gate: RegimeGate? = null): CandidateResult {
-        val engine = StrategyEngine(strategy)
+        val engine = StrategyEngine(strategy, backtestProperties)
         val riskManager = RiskManager(riskProperties)
         val portfolio = PortfolioService(backtestProperties)
         val run = simulator.run(

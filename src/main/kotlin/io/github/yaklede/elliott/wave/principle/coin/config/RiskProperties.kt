@@ -11,6 +11,7 @@ data class RiskProperties(
     val cooldownMinutes: Long = 60,
     val minQty: BigDecimal = BigDecimal("0.0"),
     val maxQty: BigDecimal = BigDecimal("1000000.0"),
+    val maxLeverage: BigDecimal = BigDecimal("1.0"),
     val statePath: String? = "data/risk-state.json",
     val compounding: CompoundingProperties = CompoundingProperties(),
 )

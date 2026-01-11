@@ -100,11 +100,19 @@ class ExecutionEngine(
                         bybitProperties.htfInterval,
                         300,
                     )
+                    val ltfCandles = bybitProperties.lowInterval?.let {
+                        marketDataService.refreshRecent(
+                            bybitProperties.category,
+                            bybitProperties.symbol,
+                            it,
+                            1000,
+                        )
+                    } ?: emptyList()
                     if (candles.isNotEmpty()) {
                         val last = candles.last()
                         if (lastCandleTime != last.timeOpenMs) {
                             lastCandleTime = last.timeOpenMs
-                            processCandle(last.timeOpenMs, last.close, candles, htfCandles, live)
+                            processCandle(last.timeOpenMs, last.close, candles, htfCandles, ltfCandles, live)
                         }
                     }
                 } catch (ex: Exception) {
@@ -120,6 +128,7 @@ class ExecutionEngine(
         closePrice: BigDecimal,
         candles: List<io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle>,
         htfCandles: List<io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle>,
+        ltfCandles: List<io.github.yaklede.elliott.wave.principle.coin.marketdata.Candle>,
         live: Boolean,
     ) {
         val intervalMs = IntervalUtil.intervalToMillis(bybitProperties.interval)
@@ -129,7 +138,7 @@ class ExecutionEngine(
         riskStateStore.save(riskManager.snapshot())
 
         val gate = regimeGateProvider.currentGate()
-        val signal = strategyEngine.evaluate(candles, htfCandles, gate)
+        val signal = strategyEngine.evaluate(candles, htfCandles, ltfCandles, gate)
         val position = portfolioService.position
 
         if (position.side == PositionSide.FLAT && (signal.type == SignalType.ENTER_LONG || signal.type == SignalType.ENTER_SHORT)) {

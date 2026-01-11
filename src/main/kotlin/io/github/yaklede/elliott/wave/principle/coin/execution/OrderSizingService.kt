@@ -18,8 +18,9 @@ class OrderSizingService(
         equity: BigDecimal,
         entryPrice: BigDecimal,
         stopPrice: BigDecimal,
+        riskFraction: BigDecimal = BigDecimal.ONE,
     ): BigDecimal {
-        val rawQty = riskManager.computeOrderQty(equity, entryPrice, stopPrice)
+        val rawQty = riskManager.computeOrderQty(equity, entryPrice, stopPrice, riskFraction)
         if (rawQty <= BigDecimal.ZERO) return BigDecimal.ZERO
         val filters = instrumentInfoService.getFilters(bybitProperties.category, bybitProperties.symbol)
         return applyFilters(rawQty, entryPrice, filters)
